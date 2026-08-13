@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Rubik:wght@400;500;600;700;800&family=Heebo:wght@400;500;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-jakarta: 'Inter', 'Plus Jakarta Sans', sans-serif;
+  --font-heebo: 'Inter', 'Heebo', 'Rubik', sans-serif;
+}
+
+html, body {
+  background-color: #F8FAFC;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+html.dark, body.dark, .dark {
+  background-color: #121212 !important;
+  color: #FFFFFF !important;
+}
+
+body {
+  font-family: var(--font-jakarta);
+  color: #0F172A;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[dir="rtl"] body {
+  font-family: var(--font-heebo);
+}
+
+/* Card utilities */
+.photo-card {
+  background-color: #FFFFFF;
+  border-radius: 20px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.04);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.dark .photo-card {
+  background-color: #1A1A1A !important;
+  border-color: #262626 !important;
+  box-shadow: 0 10px 40px -15px rgba(0, 0, 0, 0.5);
+  color: #FFFFFF !important;
+}
+
+/* Vibrant Electric Indigo Hero Card (Matching User Picture) */
+.photo-card-lime, .photo-card-indigo {
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  border-radius: 20px;
+  color: #FFFFFF;
+  box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.2);
+}
+
+.dark .photo-card-lime, .dark .photo-card-indigo {
+  background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
+  border: 1px solid #4F46E5;
+  color: #FFFFFF;
+  box-shadow: 0 8px 24px -4px rgba(79, 70, 229, 0.15);
+}
+
+.photo-btn-dark {
+  background-color: #0F172A;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.photo-btn-dark:hover {
+  background-color: #020617;
+  transform: translateY(-1px);
+}
+
+.dark .photo-btn-dark {
+  background-color: #7C3AED;
+  color: #FFFFFF;
+  font-weight: 800;
+}
+
+.dark .photo-btn-dark:hover {
+  background-color: #8B5CF6;
+}
+
+.photo-btn-lime, .photo-btn-indigo {
+  background-color: #7C3AED;
+  color: #FFFFFF;
+  border-radius: 9999px;
+  font-weight: 800;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+}
+
+.photo-btn-lime:hover, .photo-btn-indigo:hover {
+  background-color: #6D28D9;
+  transform: translateY(-1px);
+}
+
+.photo-input {
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  color: #0F172A;
+  border-radius: 16px;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.photo-input:focus {
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+  outline: none;
+}
+
+.dark .photo-input {
+  background-color: #0A0E17;
+  border-color: #222C3D;
+  color: #FFFFFF;
+}
+
+.dark .photo-input:focus {
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+}
+
+/* Sliding nav pill indicator transition */
+.nav-slider {
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #0A0E17;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+/* Keyframe animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scanBeam {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scanBeam {
+  animation: scanBeam 2.2s ease-in-out infinite alternate;
+}

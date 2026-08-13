@@ -1,0 +1,34 @@
+# dependencies
+/node_modules
+/.pnpm-store
+
+# next.js build output
+/.next/
+/out/
+/build
+
+# environment variables
+.env
+.env.local
+.env.production
+.env*.local
+
+# build cache
+tsconfig.tsbuildinfo
+
+# scratch scripts
+scratch/
+
+# debug logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# system files
+.DS_Store
+Thumbs.db
+
+# firebase secrets
+firebase-service-account.json
+
