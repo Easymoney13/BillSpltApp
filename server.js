@@ -36,6 +36,7 @@ const {
 const { broadcastToRoom, subscribeClient } = require('./lib/realtimeRooms');
 const { reconcileReceipt } = require('./lib/receiptMath');
 const { processGroupBillAction } = require('./lib/groupActions');
+const { trackAnalyticsEvent } = require('./lib/analytics');
 
 const admin = require('firebase-admin');
 const fs = require('fs');
@@ -250,25 +251,67 @@ app.prepare().then(() => {
 
   // Parse a receipt and create a private real-time session.
   server.post('/api/receipt/parse', authenticateUser, ocrRateLimit, async (req, res) => {
+    const startedAt = Date.now();
+    const ocrSource = req.body?.imageBase64 ? 'server-image' : 'client-parsed';
+    void trackAnalyticsEvent('ocr_scan_started', {
+      userId: req.user?.uid,
+      metadata: { route: '/api/receipt/parse', ocrSource },
+    });
     try {
       const receipt = await parseReceiptRequest(req);
       if (!receipt) {
+        void trackAnalyticsEvent('ocr_scan_failed', {
+          userId: req.user?.uid,
+          metadata: {
+            route: '/api/receipt/parse', ocrSource, outcome: 'not-readable',
+            durationMs: Date.now() - startedAt, httpStatus: 400,
+          },
+        });
         return res.status(400).json({
           success: false,
           isNotBill: true,
           error: 'No readable receipt items and prices were detected.',
         });
       }
+      void trackAnalyticsEvent('ocr_scan_succeeded', {
+        userId: req.user?.uid,
+        metadata: {
+          route: '/api/receipt/parse', ocrSource, durationMs: Date.now() - startedAt,
+          itemCount: receipt.items.length,
+          reconciliationStatus: receipt.reconciliation?.status || 'unknown',
+        },
+      });
       return res.json({ success: true, receipt });
     } catch (err) {
+      void trackAnalyticsEvent('ocr_scan_failed', {
+        userId: req.user?.uid,
+        metadata: {
+          route: '/api/receipt/parse', ocrSource, outcome: 'error',
+          durationMs: Date.now() - startedAt, httpStatus: err?.statusCode || 500,
+          errorCode: err?.name || 'parse_error',
+        },
+      });
       return sendRouteError(res, err, 'Failed to parse receipt');
     }
   });
 
   server.post('/api/receipt/scan', authenticateUser, ocrRateLimit, async (req, res) => {
+    const startedAt = Date.now();
+    const ocrSource = req.body?.imageBase64 ? 'server-image' : 'client-parsed';
+    void trackAnalyticsEvent('ocr_scan_started', {
+      userId: req.user?.uid,
+      metadata: { route: '/api/receipt/scan', ocrSource },
+    });
     try {
       const parsedReceipt = await parseReceiptRequest(req);
       if (!parsedReceipt) {
+        void trackAnalyticsEvent('ocr_scan_failed', {
+          userId: req.user?.uid,
+          metadata: {
+            route: '/api/receipt/scan', ocrSource, outcome: 'not-readable',
+            durationMs: Date.now() - startedAt, httpStatus: 400,
+          },
+        });
         return res.status(400).json({
           success: false,
           isNotBill: true,
@@ -305,6 +348,20 @@ app.prepare().then(() => {
 
       db.saveSession(newSession);
 
+      const commonAnalyticsContext = {
+        userId: req.user?.uid,
+        sessionId: newSession.id,
+        metadata: {
+          route: '/api/receipt/scan', ocrSource, durationMs: Date.now() - startedAt,
+          itemCount: newSession.items.length,
+          memberCount: newSession.members.length,
+          currency: newSession.currency,
+          reconciliationStatus: newSession.reconciliation?.status || 'unknown',
+        },
+      };
+      void trackAnalyticsEvent('ocr_scan_succeeded', commonAnalyticsContext);
+      void trackAnalyticsEvent('session_created', commonAnalyticsContext);
+
       return res.json({
         success: true,
         sessionId: newSession.id,
@@ -315,6 +372,14 @@ app.prepare().then(() => {
         session: publicRoom(newSession),
       });
     } catch (err) {
+      void trackAnalyticsEvent('ocr_scan_failed', {
+        userId: req.user?.uid,
+        metadata: {
+          route: '/api/receipt/scan', ocrSource, outcome: 'error',
+          durationMs: Date.now() - startedAt, httpStatus: err?.statusCode || 500,
+          errorCode: err?.name || 'scan_error',
+        },
+      });
       return sendRouteError(res, err, 'Failed to parse receipt');
     }
   });
@@ -341,6 +406,13 @@ app.prepare().then(() => {
         avatarColor: getRandomAvatarColor(),
       });
       if (joined.changed) db.saveSession(session);
+      if (joined.changed) {
+        void trackAnalyticsEvent('participant_joined', {
+          userId: req.user?.uid,
+          sessionId: session.id,
+          metadata: { memberCount: session.members.length },
+        });
+      }
       global.broadcastSessionState(session.id);
       return res.json({
         success: true,
@@ -407,8 +479,47 @@ app.prepare().then(() => {
       if (linkedGroup && linkedBill) global.broadcastGroupState(linkedGroup.id);
 
       global.broadcastSessionState(updated.id);
+
+      const subtotal = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
+      const actionEventMap = {
+        TOGGLE_CLAIM: 'item_claim_toggled',
+        SPLIT_EVERYONE: 'items_split_everyone',
+        ADD_ITEM: 'receipt_corrected',
+        EDIT_ITEM: 'receipt_corrected',
+        DELETE_ITEM: 'receipt_corrected',
+        SET_TIP: 'tip_selected',
+        TOGGLE_SETTLED: 'member_settled_toggled',
+        SETTLE_ALL: 'session_completed',
+      };
+      const eventType = actionEventMap[action];
+      if (eventType) {
+        const actionItem = payload?.itemId ? updated.items.find((item) => item.id === payload.itemId) : null;
+        void trackAnalyticsEvent(eventType, {
+          userId: req.user?.uid,
+          sessionId: updated.id,
+          metadata: {
+            action,
+            amount: Math.round(subtotal * (1 + Number(updated.tipPercentage || 0) / 100) * 100) / 100,
+            category: actionItem?.category,
+            correctionKind: ['ADD_ITEM', 'EDIT_ITEM', 'DELETE_ITEM'].includes(action) ? action.toLowerCase() : undefined,
+            currency: updated.currency,
+            durationMs: action === 'SETTLE_ALL' ? Math.max(0, Number(updated.settledAt || Date.now()) - Number(updated.createdAt || Date.now())) : undefined,
+            itemCount: updated.items.length,
+            memberCount: updated.members.length,
+            tipPercentage: updated.tipPercentage || 0,
+          },
+        });
+      }
       return res.json({ success: true, session: publicRoom(updated) });
     } catch (err) {
+      void trackAnalyticsEvent('product_error', {
+        userId: req.user?.uid,
+        sessionId: req.body?.sessionId,
+        metadata: {
+          route: '/api/session/action', action: req.body?.action,
+          httpStatus: err?.statusCode || 500, errorCode: err?.name || 'session_action_error',
+        },
+      });
       return sendRouteError(res, err, 'Failed to update session');
     }
   });
@@ -775,6 +886,11 @@ app.prepare().then(() => {
         user.avatarUrl = picture;
         db.saveUser(user);
       }
+
+      void trackAnalyticsEvent('user_synced', {
+        userId: uid,
+        metadata: { route: '/api/user/sync' },
+      });
 
       return res.json({ success: true, user });
     } catch (err) {
