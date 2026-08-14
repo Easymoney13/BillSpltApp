@@ -31,6 +31,31 @@ export async function scanBillImageInBrowser(imageSrc: string): Promise<ParsedBi
   }
 }
 
+export async function scanBillImageRawText(imageSrc: string): Promise<string | null> {
+  let worker: any = null;
+  try {
+    worker = await createWorker(['eng', 'heb']);
+    const ret = await worker.recognize(imageSrc);
+    return ret.data.text || null;
+  } catch (err) {
+    console.warn('Browser Tesseract raw OCR failed:', err);
+    return null;
+  } finally {
+    if (worker) await worker.terminate().catch(() => {});
+  }
+}
+
+function isTotalOrTaxLine(name: string): boolean {
+  if (typeof name !== 'string') return false;
+  const clean = name.toLowerCase().replace(/[\s'"“״”`׳:-]+/g, '');
+  const totalKeywords = [
+    'total', 'subtotal', 'grandtotal', 'tax', 'vat', 'discount', 
+    'לתשלום', 'סהכ', 'סחכ', 'סךהכל', 'סכהכל', 'סחיכ', 'סהיק',
+    'מעמ', 'מזומן', 'אשראי', 'עודף'
+  ];
+  return totalKeywords.some(keyword => clean.includes(keyword));
+}
+
 export function parseReceiptText(rawText: string): ParsedBill | null {
   if (!rawText || rawText.trim().length === 0) return null;
 
@@ -138,6 +163,7 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
     }
 
     if (foundMatch && !isNaN(priceVal) && priceVal > 0 && priceVal < 10000) {
+      if (isTotalOrTaxLine(rawName)) continue;
       const qtyMatch = rawName.match(/^(\d+)\s+(.+)$/);
       let qtyStr = '';
       if (qtyMatch) {

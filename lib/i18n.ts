@@ -49,6 +49,7 @@ export const translations: Record<string, Record<string, string>> = {
     groupsTitle: "Groups",
     createGroupBtn: "Create Group",
     groupsSub: "Create a group to split shared bills and minimize debts with friends.",
+    noGroupsYetHint: "💡 Create a group above to start a shared expense tracker with friends!",
     joinGroupBtn: "Join Group",
     enterGroupCodePlaceholder: "Enter Group Code (e.g. 8492)",
     tripExpenseTracker: "Group Expense Tracker",
@@ -96,6 +97,10 @@ export const translations: Record<string, Record<string, string>> = {
     englishLangBtn: "English",
     saveSettingsBtn: "Save Settings",
     settingsSavedMsg: "Settings Saved!",
+    profilePhotoLabel: "Profile Picture",
+    changePhotoBtn: "Change",
+    removePhotoBtn: "Remove",
+    nameInputPlaceholder: "e.g. Naor",
 
     // Workspace & Session Screen
     roomMembersTitle: "Room Members",
@@ -251,6 +256,7 @@ export const translations: Record<string, Record<string, string>> = {
     groupsTitle: "קבוצות",
     createGroupBtn: "צור קבוצה",
     groupsSub: "צור קבוצה לחלוקת חשבונות וצמצום חובות עם חברים.",
+    noGroupsYetHint: "💡 צור קבוצה למעלה כדי להתחיל מעקב הוצאות משותף עם חברים!",
     joinGroupBtn: "הצטרף לקבוצה",
     enterGroupCodePlaceholder: "הזן קוד קבוצה (למשל 8492)",
     tripExpenseTracker: "מעקב הוצאות קבוצתי",
@@ -298,6 +304,10 @@ export const translations: Record<string, Record<string, string>> = {
     englishLangBtn: "English",
     saveSettingsBtn: "שמור הגדרות",
     settingsSavedMsg: "ההגדרות נשמרו!",
+    profilePhotoLabel: "תמונת פרופיל",
+    changePhotoBtn: "שינוי",
+    removePhotoBtn: "הסרה",
+    nameInputPlaceholder: "למשל: נאור",
 
     // Workspace & Session Screen
     roomMembersTitle: "חברי החדר",

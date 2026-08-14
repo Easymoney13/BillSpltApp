@@ -39,7 +39,7 @@ import { SwipeableCard } from '../components/SwipeableCard';
 import { ManualBillModal } from '../components/ManualBillModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { compressReceiptImage, compressAvatarImage } from '../../lib/imageUtils';
-import { scanBillImageInBrowser } from '../../lib/ocrScanner';
+import { scanBillImageInBrowser, scanBillImageRawText } from '../../lib/ocrScanner';
 import { getCookie, setCookie } from '../../lib/cookies';
 import { triggerHaptic } from '../../lib/haptics';
 import { clearRoomCredentials, roomHeaders, saveRoomCredentials } from '../../lib/roomTokens';
@@ -74,6 +74,20 @@ export default function HomePage() {
   } = useLanguage();
 
   const [activeTab, setActiveTab] = useState<'history' | 'sessions' | 'settings'>('sessions');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab === 'history' || tab === 'sessions' || tab === 'settings') {
+        setActiveTab(tab);
+        // Clean up the URL search params so it doesn't persist on page refresh
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, []);
+
   const [universalJoinCode, setUniversalJoinCode] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
@@ -200,14 +214,24 @@ export default function HomePage() {
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data.history)) {
-          setHistoryList(data.history);
-          localStorage.setItem(`billsplit_history_${userKey}`, JSON.stringify(data.history));
+          const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
+          const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+          const filtered = data.history.filter((item: any) => !deletedIds.includes(item.id));
+          setHistoryList(filtered);
+          localStorage.setItem(`billsplit_history_${userKey}`, JSON.stringify(filtered));
         }
       })
       .catch(() => {
         const localHist = localStorage.getItem(`billsplit_history_${userKey}`);
-        if (localHist) setHistoryList(JSON.parse(localHist));
-        else setHistoryList([]);
+        if (localHist) {
+          const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
+          const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+          const parsed = JSON.parse(localHist);
+          const filtered = parsed.filter((item: any) => !deletedIds.includes(item.id));
+          setHistoryList(filtered);
+        } else {
+          setHistoryList([]);
+        }
       });
   }, [profile.displayName]);
 
@@ -340,25 +364,46 @@ export default function HomePage() {
     setIsUploading(true);
     try {
       const compressedBase64 = await compressReceiptImage(file);
-      // 1. Primary: Try Gemini AI Vision via backend
-      let res = await fetch('/api/receipt/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: compressedBase64,
-          mimeType: 'image/jpeg',
-          hostName: profile.displayName || 'Host'
-        })
-      });
+      let data: any = { success: false };
 
-      let data = await res.json();
+      // 1. Primary (Option 3): Extract raw text locally via Tesseract and parse it via server Gemini
+      console.log('⚡ Running client-side Tesseract raw text scan...');
+      const rawText = await scanBillImageRawText(compressedBase64);
 
-      // 2. Fallback: If Gemini returned no items, try local browser Tesseract OCR
+      if (rawText && rawText.trim().length > 0) {
+        console.log('⚡ Raw text extracted locally, sending to server for Gemini parsing...');
+        const res = await fetch('/api/receipt/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rawText,
+            hostName: profile.displayName || 'Host'
+          })
+        });
+        data = await res.json();
+      }
+
+      // 2. Fallback: If local Tesseract raw scan failed or returned no session, fall back to server image scanning
       if (!data.success || !data.sessionId) {
-        console.log('⚡ Running browser Tesseract OCR fallback...');
+        console.log('⚠️ Raw text parser failed or was skipped. Trying server-side image vision OCR...');
+        const res = await fetch('/api/receipt/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: compressedBase64,
+            mimeType: 'image/jpeg',
+            hostName: profile.displayName || 'Host'
+          })
+        });
+        data = await res.json();
+      }
+
+      // 3. Fallback: If both server parses failed, try local browser Tesseract OCR parser
+      if (!data.success || !data.sessionId) {
+        console.log('⚠️ Server OCR failed. Running browser Tesseract OCR fallback parser...');
         const clientParsed = await scanBillImageInBrowser(compressedBase64);
         if (clientParsed && clientParsed.items && clientParsed.items.length > 0) {
-          res = await fetch('/api/receipt/scan', {
+          const res = await fetch('/api/receipt/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -441,6 +486,10 @@ export default function HomePage() {
       const updated = exists
         ? prev.map((g) => (g.id === newGroup.id ? { ...g, ...newGroup } : g))
         : [{ id: newGroup.id, code: newGroup.code, name: newGroup.name }, ...prev];
+      const userKey = profile.displayName || '';
+      if (userKey) {
+        localStorage.setItem(`billsplit_user_groups_${userKey}`, JSON.stringify(updated));
+      }
       localStorage.setItem('billsplit_user_groups', JSON.stringify(updated));
       return updated;
     });
@@ -484,13 +533,20 @@ export default function HomePage() {
 
   const handleDeleteHistory = async (id: string) => {
     try {
-      const res = await fetch(`/api/history/${id}`, { method: 'DELETE' });
-      if (!res.ok) return false;
+      const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
+      const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+      if (!deletedIds.includes(id)) {
+        deletedIds.push(id);
+        localStorage.setItem('billsplit_deleted_history_ids', JSON.stringify(deletedIds));
+      }
       setHistoryList((prev) => prev.filter((item) => item.id !== id));
+
+      // Attempt backend deletion
+      await fetch(`/api/history/${id}`, { method: 'DELETE' });
       return true;
     } catch (err) {
       console.error(err);
-      return false;
+      return true; // Return true as it was successfully hidden on the client side
     }
   };
 
@@ -1017,7 +1073,7 @@ export default function HomePage() {
                       type="text"
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
-                      placeholder="e.g. Naor"
+                      placeholder={t('nameInputPlaceholder', undefined, 'e.g. Naor')}
                       className="w-full py-1.5 px-3.5 rounded-xl photo-input text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
                       required
                     />

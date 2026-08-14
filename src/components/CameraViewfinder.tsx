@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Upload, Flashlight, RefreshCw, X } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
-import { scanBillImageInBrowser } from '../../lib/ocrScanner';
+import { scanBillImageInBrowser, scanBillImageRawText } from '../../lib/ocrScanner';
 import { compressReceiptImage } from '../../lib/imageUtils';
 
 interface CameraViewfinderProps {
@@ -116,27 +116,47 @@ export const CameraViewfinder: React.FC<CameraViewfinderProps> = ({
     setIsScanning(true);
     try {
       const compressed = await compressReceiptImage(imageToScan);
-
-      // 1. Primary: Try Gemini AI Vision via backend
       const receiptEndpoint = parseOnly ? '/api/receipt/parse' : '/api/receipt/scan';
-      let res = await fetch(receiptEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: compressed,
-          mimeType: 'image/jpeg',
-          hostName
-        })
-      });
+      let data: any = { success: false };
 
-      let data = await res.json();
+      // 1. Primary (Option 3): Extract raw text locally via Tesseract and parse it via server Gemini
+      console.log('⚡ Running client-side Tesseract raw text scan...');
+      const rawText = await scanBillImageRawText(compressed);
 
-      // 2. Fallback: If Gemini returned no items, try local browser Tesseract OCR
+      if (rawText && rawText.trim().length > 0) {
+        console.log('⚡ Raw text extracted locally, sending to server for Gemini parsing...');
+        const res = await fetch(receiptEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rawText,
+            hostName
+          })
+        });
+        data = await res.json();
+      }
+
+      // 2. Fallback: If local Tesseract raw scan failed or returned no session/receipt, fall back to server image scanning
       if (!data.success || (!data.sessionId && !data.receipt)) {
-        console.log('⚡ Running browser Tesseract OCR fallback...');
+        console.log('⚠️ Raw text parser failed or was skipped. Trying server-side image vision OCR...');
+        const res = await fetch(receiptEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: compressed,
+            mimeType: 'image/jpeg',
+            hostName
+          })
+        });
+        data = await res.json();
+      }
+
+      // 3. Fallback: If both server parses failed, try local browser Tesseract OCR parser
+      if (!data.success || (!data.sessionId && !data.receipt)) {
+        console.log('⚠️ Server OCR failed. Running browser Tesseract OCR fallback parser...');
         const clientParsed = await scanBillImageInBrowser(compressed);
         if (clientParsed && clientParsed.items && clientParsed.items.length > 0) {
-          res = await fetch(receiptEndpoint, {
+          const res = await fetch(receiptEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

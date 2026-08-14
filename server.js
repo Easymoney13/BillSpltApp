@@ -17,6 +17,7 @@ const db = dbModule.db || dbModule.default || dbModule;
 
 const geminiModule = require('./lib/gemini');
 const parseReceiptImage = geminiModule.parseReceiptImage || geminiModule.default?.parseReceiptImage;
+const parseReceiptTextWithGemini = geminiModule.parseReceiptTextWithGemini || geminiModule.default?.parseReceiptTextWithGemini;
 
 const security = require('./lib/security');
 const debtMinimizer = require('./lib/debtMinimizer');
@@ -78,6 +79,11 @@ if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
   } catch (err) {
     console.error('❌ Failed to initialize Firebase Admin fallback:', err.message);
   }
+}
+
+// Initialize Firestore database migration from local db.json if needed
+if (typeof db.migrateLocalDbToFirestore === 'function') {
+  db.migrateLocalDbToFirestore();
 }
 
 // Middleware to verify Firebase ID token in Authorization header
@@ -176,8 +182,8 @@ app.prepare().then(() => {
     return res.status(status).json({ error: status >= 500 ? fallbackMessage : err.message });
   }
 
-  global.broadcastSessionState = function (sessionId) {
-    const session = db.getSession(sessionId);
+  global.broadcastSessionState = async function (sessionId) {
+    const session = await db.getSession(sessionId);
     if (!session) return;
 
     sendToRoom('session', session.id, {
@@ -186,8 +192,8 @@ app.prepare().then(() => {
     });
   };
 
-  global.broadcastGroupState = function (groupId) {
-    const group = db.getGroup(groupId);
+  global.broadcastGroupState = async function (groupId) {
+    const group = await db.getGroup(groupId);
     if (!group) return;
 
     sendToRoom('group', group.id, {
@@ -228,10 +234,16 @@ app.prepare().then(() => {
       mimeType,
       parsedBill: clientParsed,
       customGeminiKey,
+      rawText,
     } = validateReceiptBody(req.body);
-    let parsedReceipt = imageBase64
-      ? await parseReceiptImage(imageBase64, mimeType, customGeminiKey)
-      : null;
+
+    let parsedReceipt = null;
+    if (rawText) {
+      parsedReceipt = await parseReceiptTextWithGemini(rawText, customGeminiKey);
+    } else if (imageBase64) {
+      parsedReceipt = await parseReceiptImage(imageBase64, mimeType, customGeminiKey);
+    }
+
     if ((!parsedReceipt?.items?.length) && clientParsed?.items?.length) parsedReceipt = clientParsed;
     if (!parsedReceipt?.items?.length) return null;
 
@@ -337,7 +349,7 @@ app.prepare().then(() => {
 
       const newSession = {
         id: createEntityId('sess'),
-        code: db.generateUniqueRoomCode(),
+        code: await db.generateUniqueRoomCode(),
         storeName: security.sanitizeString(parsedReceipt.storeName || 'Scanned Receipt', 40),
         date: parsedReceipt.date || new Date().toISOString().split('T')[0],
         currency: security.sanitizeString(parsedReceipt.currency || 'NIS', 5),
@@ -354,7 +366,7 @@ app.prepare().then(() => {
         items: parsedReceipt.items,
       };
 
-      db.saveSession(newSession);
+      await db.saveSession(newSession);
 
       const commonAnalyticsContext = {
         userId: req.user?.uid,
@@ -392,18 +404,18 @@ app.prepare().then(() => {
     }
   });
 
-  server.get('/api/session/:idOrCode', (req, res) => {
+  server.get('/api/session/:idOrCode', async (req, res) => {
     const sanitizedId = security.sanitizeString(req.params.idOrCode, 50);
-    const session = db.getSession(sanitizedId);
+    const session = await db.getSession(sanitizedId);
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
     return res.json({ session: publicRoom(session) });
   });
 
-  server.post('/api/session/:idOrCode/join', authenticateUser, (req, res) => {
+  server.post('/api/session/:idOrCode/join', authenticateUser, async (req, res) => {
     try {
-      const session = db.getSession(security.sanitizeString(req.params.idOrCode, 100));
+      const session = await db.getSession(security.sanitizeString(req.params.idOrCode, 100));
       if (!session) return res.status(404).json({ error: 'Session not found' });
       if (session.status === 'settled') return res.status(409).json({ error: 'This session is already closed' });
 
@@ -413,7 +425,7 @@ app.prepare().then(() => {
         name: req.body?.name || req.user?.name || 'Guest',
         avatarColor: getRandomAvatarColor(),
       });
-      if (joined.changed) db.saveSession(session);
+      if (joined.changed) await db.saveSession(session);
       if (joined.changed) {
         void trackAnalyticsEvent('participant_joined', {
           userId: req.user?.uid,
@@ -433,10 +445,10 @@ app.prepare().then(() => {
     }
   });
 
-  server.post('/api/session/action', authenticateUser, (req, res) => {
+  server.post('/api/session/action', authenticateUser, async (req, res) => {
     try {
       const { sessionId, action, payload } = req.body || {};
-      const session = db.getSession(security.sanitizeString(sessionId, 100));
+      const session = await db.getSession(security.sanitizeString(sessionId, 100));
       if (!session) return res.status(404).json({ error: 'Session not found' });
 
       const actor = authorizedRoomMember(req, session);
@@ -450,7 +462,7 @@ app.prepare().then(() => {
         updated.reconciliation = reconcileReceipt(updated);
       }
 
-      const linkedGroup = updated.groupId ? db.getGroup(updated.groupId) : null;
+      const linkedGroup = updated.groupId ? await db.getGroup(updated.groupId) : null;
       const linkedBill = linkedGroup?.bills?.find((bill) => bill.id === updated.billId || bill.sessionId === updated.id);
       if (linkedBill) {
         linkedBill.items = updated.items;
@@ -462,12 +474,12 @@ app.prepare().then(() => {
       }
 
       if (linkedGroup && linkedBill) {
-        db.saveGroupAndSession(linkedGroup, updated);
+        await db.saveGroupAndSession(linkedGroup, updated);
       } else if (action === 'SETTLE_ALL') {
         const publicSession = publicRoom(updated);
         const subtotal = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
         const totalAmount = Math.round(subtotal * (1 + Number(updated.tipPercentage || 0) / 100) * 100) / 100;
-        db.saveSessionAndHistory(updated, {
+        await db.saveSessionAndHistory(updated, {
           id: updated.id,
           storeName: updated.storeName,
           date: updated.date,
@@ -481,7 +493,7 @@ app.prepare().then(() => {
           createdAt: updated.createdAt || Date.now(),
         });
       } else {
-        db.saveSession(updated);
+        await db.saveSession(updated);
       }
 
       if (linkedGroup && linkedBill) global.broadcastGroupState(linkedGroup.id);
@@ -537,7 +549,7 @@ app.prepare().then(() => {
   // GROUPS API ENDPOINTS
 
   // 1. Create Group
-  server.post('/api/groups', authenticateUser, (req, res) => {
+  server.post('/api/groups', authenticateUser, async (req, res) => {
     try {
       const { name, currency, hostName } = req.body;
       const cleanName = security.sanitizeString(name || 'Trip Group', 40);
@@ -551,7 +563,7 @@ app.prepare().then(() => {
 
       const newGroup = {
         id: createEntityId('grp'),
-        code: db.generateUniqueRoomCode(),
+        code: await db.generateUniqueRoomCode(),
         name: cleanName,
         currency: security.sanitizeString(currency || 'NIS', 5),
         createdAt: Date.now(),
@@ -559,7 +571,7 @@ app.prepare().then(() => {
         bills: []
       };
 
-      db.saveGroup(newGroup);
+      await db.saveGroup(newGroup);
 
       return res.json({
         success: true,
@@ -576,9 +588,9 @@ app.prepare().then(() => {
   });
 
   // 2. Fetch Group by ID or 4-digit Code
-  server.get('/api/groups/:idOrCode', (req, res) => {
+  server.get('/api/groups/:idOrCode', async (req, res) => {
     const sanitizedId = security.sanitizeString(req.params.idOrCode, 50);
-    const group = db.getGroup(sanitizedId);
+    const group = await db.getGroup(sanitizedId);
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
@@ -587,10 +599,10 @@ app.prepare().then(() => {
   });
 
   // 3. Join Group by Code
-  server.post('/api/groups/join', authenticateUser, (req, res) => {
+  server.post('/api/groups/join', authenticateUser, async (req, res) => {
     try {
       const { groupId, name } = req.body;
-      const group = db.getGroup(groupId);
+      const group = await db.getGroup(groupId);
       if (!group) {
         return res.status(404).json({ error: 'Group not found' });
       }
@@ -601,7 +613,7 @@ app.prepare().then(() => {
         name: name || req.user?.name || 'Member',
         avatarColor: getRandomAvatarColor(),
       });
-      if (joined.changed) db.saveGroup(group);
+      if (joined.changed) await db.saveGroup(group);
       global.broadcastGroupState(group.id);
 
       return res.json({
@@ -615,14 +627,14 @@ app.prepare().then(() => {
     }
   });
 
-  server.post('/api/groups/:groupId/leave', authenticateUser, (req, res) => {
+  server.post('/api/groups/:groupId/leave', authenticateUser, async (req, res) => {
     try {
-      const group = db.getGroup(security.sanitizeString(req.params.groupId, 100));
+      const group = await db.getGroup(security.sanitizeString(req.params.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
       const actor = authorizedRoomMember(req, group);
       if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
       if (actor.isHost) return res.status(409).json({ error: 'The host must delete the group or transfer ownership before leaving' });
-      const updated = db.leaveGroup(group.id, actor.id);
+      const updated = await db.leaveGroup(group.id, actor.id);
       global.broadcastGroupState(group.id);
       return res.json({ success: true, group: publicGroupWithDebt(updated) });
     } catch (err) {
@@ -630,14 +642,14 @@ app.prepare().then(() => {
     }
   });
 
-  server.delete('/api/groups/:groupId', authenticateUser, (req, res) => {
+  server.delete('/api/groups/:groupId', authenticateUser, async (req, res) => {
     try {
-      const group = db.getGroup(security.sanitizeString(req.params.groupId, 100));
+      const group = await db.getGroup(security.sanitizeString(req.params.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
       const actor = authorizedRoomMember(req, group);
       if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
       if (!actor.isHost) return res.status(403).json({ error: 'Only the group host can delete the group' });
-      db.deleteGroup(group.id);
+      await db.deleteGroup(group.id);
       sendToRoom('group', group.id, { type: 'GROUP_DELETED', groupId: group.id });
       return res.json({ success: true });
     } catch (err) {
@@ -646,10 +658,10 @@ app.prepare().then(() => {
   });
 
   // 4. Add or Edit Bill in Group
-  server.post('/api/groups/bill', authenticateUser, (req, res) => {
+  server.post('/api/groups/bill', authenticateUser, async (req, res) => {
     try {
       const { groupId, bill } = req.body;
-      const group = db.getGroup(security.sanitizeString(groupId, 100));
+      const group = await db.getGroup(security.sanitizeString(groupId, 100));
       if (!group) {
         return res.status(404).json({ error: 'Group not found' });
       }
@@ -695,7 +707,7 @@ app.prepare().then(() => {
         return res.status(403).json({ error: 'Only the bill creator or group host can edit this bill' });
       }
       const sourceSessionId = security.sanitizeString(bill.sourceSessionId || '', 100);
-      const sourceSession = sourceSessionId ? db.getSession(sourceSessionId) : null;
+      const sourceSession = sourceSessionId ? await db.getSession(sourceSessionId) : null;
       if (sourceSessionId) {
         const sourceMember = sourceSession ? findRoomMember(sourceSession, {
           uid: req.user?.uid,
@@ -739,12 +751,12 @@ app.prepare().then(() => {
         group.bills.unshift(newBillRecord);
       }
 
-      const existingSession = db.getSession(sessionId);
+      const existingSession = await db.getSession(sessionId);
       const liveSession = {
         id: sessionId,
         groupId: group.id,
         billId,
-        code: existingSession?.code || db.generateUniqueRoomCode(),
+        code: existingSession?.code || await db.generateUniqueRoomCode(),
         storeName: cleanTitle,
         date: billDate,
         currency: group.currency || 'NIS',
@@ -763,7 +775,7 @@ app.prepare().then(() => {
         items: cleanItems,
         createdAt: existingSession?.createdAt || Date.now(),
       };
-      db.saveGroupAndSession(group, liveSession);
+      await db.saveGroupAndSession(group, liveSession);
 
       if (global.broadcastGroupState) {
         global.broadcastGroupState(group.id);
@@ -780,21 +792,21 @@ app.prepare().then(() => {
     }
   });
 
-  server.post('/api/groups/bill/action', authenticateUser, (req, res) => {
+  server.post('/api/groups/bill/action', authenticateUser, async (req, res) => {
     try {
-      const group = db.getGroup(security.sanitizeString(req.body?.groupId, 100));
+      const group = await db.getGroup(security.sanitizeString(req.body?.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
       const actor = authorizedRoomMember(req, group);
       if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
       const updated = processGroupBillAction(group, req.body?.action, req.body?.payload, actor);
       const bill = updated.bills.find((candidate) => candidate.id === req.body.payload.billId);
-      const liveSession = bill?.sessionId ? db.getSession(bill.sessionId) : null;
+      const liveSession = bill?.sessionId ? await db.getSession(bill.sessionId) : null;
       if (liveSession) {
         liveSession.items = bill.items;
-        db.saveGroupAndSession(updated, liveSession);
+        await db.saveGroupAndSession(updated, liveSession);
         global.broadcastSessionState(liveSession.id);
       } else {
-        db.saveGroup(updated);
+        await db.saveGroup(updated);
       }
       global.broadcastGroupState(updated.id);
       return res.json({ success: true, group: publicGroupWithDebt(updated) });
@@ -848,12 +860,22 @@ app.prepare().then(() => {
 
   function isUserMember(memberList, userName, phone, userId) {
     if (!Array.isArray(memberList) || memberList.length === 0) return false;
-    return Boolean(userId && memberList.some((member) => member.id === userId && member.active !== false));
+    if (userId) {
+      return memberList.some((member) => member.id === userId && member.active !== false);
+    }
+    return memberList.some((member) => 
+      (member.name === userName || (phone && member.phone === phone)) && member.active !== false
+    );
   }
 
   function getUserMember(memberList, userName, phone, userId) {
     if (!Array.isArray(memberList) || memberList.length === 0) return null;
-    return userId ? memberList.find((member) => member.id === userId) || null : null;
+    if (userId) {
+      return memberList.find((member) => member.id === userId) || null;
+    }
+    return memberList.find((member) => 
+      member.name === userName || (phone && member.phone === phone)
+    ) || null;
   }
 
   function calculateUserShareForSession(itemsList, memberList, userId, userName, phone, tipPercentage = 0) {
@@ -877,7 +899,7 @@ app.prepare().then(() => {
   }
 
   // POST /api/user/sync - Synchronize/register user account & settings
-  server.post('/api/user/sync', authenticateUser, (req, res) => {
+  server.post('/api/user/sync', authenticateUser, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: 'Unauthorized: Authentication required' });
@@ -887,12 +909,12 @@ app.prepare().then(() => {
       const { username, settings } = req.body;
       const finalName = username || name || 'User';
 
-      const user = db.findOrCreateUser(uid, finalName, '', settings || {});
+      const user = await db.findOrCreateUser(uid, finalName, '', settings || {});
 
       // Sync avatar URL from Google if available
       if (picture && user.avatarUrl !== picture) {
         user.avatarUrl = picture;
-        db.saveUser(user);
+        await db.saveUser(user);
       }
 
       void trackAnalyticsEvent('user_synced', {
@@ -908,18 +930,23 @@ app.prepare().then(() => {
   });
 
   // GET /api/user/groups - Get active groups for a specific user
-  server.get('/api/user/groups', authenticateUser, (req, res) => {
+  server.get('/api/user/groups', authenticateUser, async (req, res) => {
     try {
-      if (!req.user) {
-        return res.json({ success: true, groups: [] });
+      let uid = null;
+      let userName = '';
+      let phone = '';
+
+      if (req.user) {
+        uid = req.user.uid;
+        const user = await db.getUserByUid(uid);
+        userName = user ? user.username : '';
+        phone = user ? user.phone : '';
+      } else {
+        userName = security.sanitizeString(req.query.userName || '', 50);
+        phone = security.sanitizeString(req.query.phone || '', 20);
       }
 
-      const { uid } = req.user;
-      const user = db.getUserByUid(uid);
-      const userName = user ? user.username : '';
-      const phone = user ? user.phone : '';
-      const allGroups = Object.values(db.getAllGroups() || {});
-
+      const allGroups = Object.values(await db.getAllGroups() || {});
       const userGroups = allGroups.filter((g) => isUserMember(g.members, userName, phone, uid));
 
       return res.json({
@@ -939,20 +966,26 @@ app.prepare().then(() => {
   });
 
   // GET /api/history - Get user payments (strictly isolated by user identity)
-  server.get('/api/history', authenticateUser, (req, res) => {
+  server.get('/api/history', authenticateUser, async (req, res) => {
     try {
-      if (!req.user) {
-        return res.json({ success: true, history: [] });
+      let uid = null;
+      let userName = '';
+      let phone = '';
+      let hiddenHistoryIds = new Set();
+
+      if (req.user) {
+        uid = req.user.uid;
+        const user = await db.getUserByUid(uid);
+        userName = user ? user.username : '';
+        phone = user ? user.phone : '';
+        hiddenHistoryIds = new Set(Array.isArray(user?.hiddenHistoryIds) ? user.hiddenHistoryIds : []);
+      } else {
+        userName = security.sanitizeString(req.query.userName || '', 50);
+        phone = security.sanitizeString(req.query.phone || '', 20);
       }
 
-      const { uid } = req.user;
-      const user = db.getUserByUid(uid);
-      const userName = user ? user.username : '';
-      const phone = user ? user.phone : '';
-      const hiddenHistoryIds = new Set(Array.isArray(user?.hiddenHistoryIds) ? user.hiddenHistoryIds : []);
-
-      const standaloneHistory = db.getHistory() || [];
-      const allGroups = Object.values(db.getAllGroups() || {});
+      const standaloneHistory = await db.getHistory() || [];
+      const allGroups = Object.values(await db.getAllGroups() || {});
       const groupBillsHistory = [];
 
       // 1. Group Bills
@@ -1000,10 +1033,10 @@ app.prepare().then(() => {
       // 2. Standalone Session History
       const processedStandalone = [];
 
-      standaloneHistory.forEach((histItem) => {
-        if (hiddenHistoryIds.has(histItem.id)) return;
+      for (const histItem of standaloneHistory) {
+        if (hiddenHistoryIds.has(histItem.id)) continue;
 
-        const liveSession = db.getSession(histItem.id);
+        const liveSession = await db.getSession(histItem.id);
 
         const effectiveMembers = (liveSession && Array.isArray(liveSession.members) && liveSession.members.length > 0)
           ? liveSession.members
@@ -1014,7 +1047,7 @@ app.prepare().then(() => {
           : (Array.isArray(histItem.items) ? histItem.items : []);
 
         const isMember = isUserMember(effectiveMembers, userName, phone, uid);
-        if (!isMember) return;
+        if (!isMember) continue;
 
         let userShare = typeof histItem.totalAmount === 'number' ? histItem.totalAmount : parseFloat(histItem.totalAmount) || 0;
 
@@ -1032,7 +1065,7 @@ app.prepare().then(() => {
           membersCount: effectiveMembers.length > 0 ? effectiveMembers.length : (histItem.membersCount || 1),
           userShare: Math.round(userShare * 100) / 100
         });
-      });
+      }
 
       const combinedHistory = [...processedStandalone, ...groupBillsHistory];
       combinedHistory.sort((a, b) => {
@@ -1048,11 +1081,11 @@ app.prepare().then(() => {
     }
   });
 
-  server.delete('/api/history/:id', authenticateUser, (req, res) => {
+  server.delete('/api/history/:id', authenticateUser, async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: 'Authentication required' });
       const id = security.sanitizeString(req.params.id, 100);
-      const user = db.hideHistoryForUser(req.user.uid, id);
+      const user = await db.hideHistoryForUser(req.user.uid, id);
       if (!user) return res.status(404).json({ error: 'User not found' });
       return res.json({ success: true });
     } catch (err) {
@@ -1061,11 +1094,11 @@ app.prepare().then(() => {
   });
 
   // 5. Delete Bill from Group
-  server.delete('/api/groups/bill/:groupId/:billId', authenticateUser, (req, res) => {
+  server.delete('/api/groups/bill/:groupId/:billId', authenticateUser, async (req, res) => {
     try {
       const groupId = security.sanitizeString(req.params.groupId, 50);
       const billId = security.sanitizeString(req.params.billId, 50);
-      const existingGroup = db.getGroup(groupId);
+      const existingGroup = await db.getGroup(groupId);
       if (!existingGroup) return res.status(404).json({ error: 'Group not found' });
       const actor = authorizedRoomMember(req, existingGroup);
       if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
@@ -1075,7 +1108,7 @@ app.prepare().then(() => {
         return res.status(403).json({ error: 'Only the bill creator or group host can delete this bill' });
       }
 
-      const group = db.deleteGroupBill(groupId, billId);
+      const group = await db.deleteGroupBill(groupId, billId);
       if (!group) {
         return res.status(404).json({ error: 'Group or bill not found' });
       }
@@ -1098,7 +1131,7 @@ app.prepare().then(() => {
       console.warn('⚠️ WebSocket client connection error:', err.message);
     });
 
-    ws.on('message', (message) => {
+    ws.on('message', async (message) => {
       try {
         if (message.length > 10_000) {
           ws.close(1009, 'Message too large');
@@ -1108,7 +1141,7 @@ app.prepare().then(() => {
         const { type, sessionId, groupId, accessToken } = data;
 
         if (type === 'SUBSCRIBE_GROUP' && groupId) {
-          const group = db.getGroup(groupId);
+          const group = await db.getGroup(groupId);
           const member = group ? findRoomMember(group, { accessToken }) : null;
           if (!group || !member) {
             ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid group subscription' }));
@@ -1122,7 +1155,7 @@ app.prepare().then(() => {
         if (!sessionId || !security.isValidSessionId(sessionId)) return;
 
         if (type === 'SUBSCRIBE') {
-          const session = db.getSession(sessionId);
+          const session = await db.getSession(sessionId);
           const member = session ? findRoomMember(session, { accessToken }) : null;
           if (!session || !member) {
             ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid session subscription' }));

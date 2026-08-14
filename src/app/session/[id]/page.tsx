@@ -1092,11 +1092,11 @@ function SessionWorkspaceInner() {
               </div>
 
               {/* Tip Selector */}
-              {isCurrentUserHost && <div className="space-y-2">
+              <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block">
                   {t('selectTipLabel', undefined, 'Select Tip Percentage')}
                 </label>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                   <div className="grid grid-cols-4 gap-2 flex-1">
                     {[0, 10, 12, 15].map((pct) => (
                       <button
@@ -1107,10 +1107,10 @@ function SessionWorkspaceInner() {
                           setCustomTipInput('');
                           sendAction('SET_TIP', { tipPercentage: pct });
                         }}
-                        className={`py-2 rounded-full text-xs font-extrabold transition-all border ${
+                        className={`py-2 rounded-full text-xs font-extrabold transition-all border active:scale-95 duration-100 ${
                           tipPercentage === pct && !customTipInput
                             ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-sm'
-                            : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+                            : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
                         {pct}%
@@ -1118,7 +1118,7 @@ function SessionWorkspaceInner() {
                     ))}
                   </div>
 
-                  <div className="relative w-28 shrink-0">
+                  <div className="relative w-full sm:w-28 shrink-0">
                     <input
                       type="number"
                       placeholder="Custom %"
@@ -1137,7 +1137,7 @@ function SessionWorkspaceInner() {
                     <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-slate-400 pointer-events-none">%</span>
                   </div>
                 </div>
-              </div>}
+              </div>
 
               {/* Breakdown summary */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2 text-xs">
@@ -1242,7 +1242,7 @@ function SessionWorkspaceInner() {
                     setShowSettleModal(false);
                     if (isCurrentUserHost) {
                       localStorage.removeItem('billsplit_active_session');
-                      setTimeout(() => router.push('/'), 1200);
+                      setTimeout(() => router.push('/?tab=history'), 1200);
                     }
                   }}
                   className="w-full py-4 rounded-full bg-gradient-to-r from-[#7C3AED] via-[#6366F1] to-[#4F46E5] text-white font-extrabold text-sm shadow-[0_8px_24px_rgba(124,58,237,0.3)] hover:shadow-[0_8px_24px_rgba(124,58,237,0.5)] flex items-center justify-center gap-2 transition-all active:scale-95 text-center"

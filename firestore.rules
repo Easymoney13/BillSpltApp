@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Users Collection
+    match /users/{userId} {
+      // Anyone can check user status, but only the authenticated user can edit their profile/settings
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 2. Sessions Collection (Real-time active split rooms)
+    match /sessions/{sessionId} {
+      // Allow guest and host interaction for splits
+      allow read, write: if true;
+    }
+
+    // 3. Groups Collection (Shared group expense rooms)
+    match /groups/{groupId} {
+      // Allow group members to read/write bills and join by invitation/code
+      allow read, write: if true;
+    }
+
+    // 4. History Collection (Settled bills archive)
+    match /history/{historyId} {
+      // Allow read and write access for histories
+      allow read, write: if true;
+    }
+  }
+}

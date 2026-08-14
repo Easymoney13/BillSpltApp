@@ -7496,6 +7496,15 @@
           "isHost": true,
           "settled": false,
           "avatarColor": "#A3E635"
+        },
+        {
+          "id": "member_1786690727303_620e10bacab0",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": false,
+          "settled": false,
+          "avatarColor": "#38BDF8",
+          "accessTokenHash": "b78716e0b9f75b4b2e0c6771b0991f3a1876f909d0ce356dc2c3a7fc83b9d971"
         }
       ],
       "items": [
@@ -7565,7 +7574,1400 @@
           "claimedBy": []
         }
       ],
-      "updatedAt": 1786478321667
+      "updatedAt": 1786690727305
+    },
+    "sess_1786689374107_044060534bc0": {
+      "id": "sess_1786689374107_044060534bc0",
+      "code": "1700",
+      "storeName": "COSMOPOLITAN",
+      "date": "18-08-2020",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 243.85,
+        "calculatedTotal": 243.85,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 243.85,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786689374116,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "250d79d9ca274f4786b63a6a89829a4647feb64fc74b29472a12b6209aa9a131"
+        },
+        {
+          "id": "member_1786689438010_8ca714e3d032",
+          "name": "נאור",
+          "phone": "",
+          "isHost": false,
+          "settled": true,
+          "avatarColor": "#FBBF24",
+          "accessTokenHash": "a03ded0a19186e7a8455a5c83822d6247097ac4f869fa40800be1114838aac6c"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786689374104_662b3506f521",
+          "name": "סו‎",
+          "price": 101,
+          "category": "Food",
+          "claimedBy": [
+            "member_1786689438010_8ca714e3d032"
+          ]
+        },
+        {
+          "id": "item_1786689374105_d2357771d87b",
+          "name": "8 DIET 6 (2x)",
+          "price": 9,
+          "category": "Food",
+          "claimedBy": [
+            "member_1786689438010_8ca714e3d032"
+          ]
+        },
+        {
+          "id": "item_1786689374105_303f6f6b1a7d",
+          "name": "ו‎ PT PERON",
+          "price": 4.75,
+          "category": "Food",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        },
+        {
+          "id": "item_1786689374105_b685a77ae64f",
+          "name": "FRUIT WICE",
+          "price": 2.1,
+          "category": "Food",
+          "claimedBy": [
+            "member_1786689438010_8ca714e3d032",
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        },
+        {
+          "id": "item_1786689374105_84a0a1983080",
+          "name": "OPEN FOOD £",
+          "price": 75.8,
+          "category": "Food",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        },
+        {
+          "id": "item_1786689374105_9f9415b08183",
+          "name": "SVC TL £",
+          "price": 51.2,
+          "category": "Food",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2",
+            "member_1786689438010_8ca714e3d032"
+          ]
+        }
+      ],
+      "updatedAt": 1786689473088
+    },
+    "sess_1786689527937_054f199d6fa6": {
+      "id": "sess_1786689527937_054f199d6fa6",
+      "code": "2426",
+      "storeName": "hdfhfh",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 325,
+        "calculatedTotal": 325,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 325,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "settled",
+      "createdAt": 1786689527942,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "2b77b721fe639ebba33a2af614024d931d57effa9c21e15f4d7bb020103135f4"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786689527936_cd8e50d29b64",
+          "name": "dsgsdag",
+          "price": 325,
+          "category": "Item",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        }
+      ],
+      "updatedAt": 1786689540027,
+      "settledAt": 1786689540018
+    },
+    "sess_1786689572001_260cc54e4e11": {
+      "id": "sess_1786689572001_260cc54e4e11",
+      "code": "9594",
+      "storeName": "21412",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 22,
+        "calculatedTotal": 22,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 22,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786689572017,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "a6218729d32e63e670a96b11955ce98654188504623903d2702a95316d77dab1"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786689571999_0c8ce937418b",
+          "name": "dg",
+          "price": 22,
+          "category": "Item",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        }
+      ],
+      "updatedAt": 1786689574217
+    },
+    "sess_1786689638477_034a898bb931": {
+      "id": "sess_1786689638477_034a898bb931",
+      "code": "4450",
+      "storeName": "Maman Beach",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 1713,
+        "calculatedTotal": 1713,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 1713,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786689638482,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "48d617d5544d9184ae9ce0c02a34f5f557aa63ce1657c8bbec5bdfbb7124465c"
+        },
+        {
+          "id": "member_1786689671986_19f321638a51",
+          "name": "נאור",
+          "phone": "",
+          "isHost": false,
+          "settled": true,
+          "avatarColor": "#A78BFA",
+          "accessTokenHash": "97be27c035cc81b16565221ba1df364e796ee6a4a3f261b57a6b7fa60566936c"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786689638476_e0621acc83b9",
+          "name": "E  i  P ‏ביצה בהרכבה עצמית\"‎",
+          "price": 45,
+          "category": "Food",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2",
+            "member_1786689671986_19f321638a51"
+          ]
+        },
+        {
+          "id": "item_1786689638476_a22cad2ef1f7",
+          "name": "אייספסיכלורה‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": [
+            "member_1786689671986_19f321638a51"
+          ]
+        },
+        {
+          "id": "item_1786689638476_b0d1ad3ac20c",
+          "name": "אייס וניל‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786689638477_b6e4af72f03d",
+          "name": "קולח‎ oe",
+          "price": 12,
+          "category": "Food",
+          "claimedBy": [
+            "member_1786689671986_19f321638a51"
+          ]
+        },
+        {
+          "id": "item_1786689638477_4081ce59298d",
+          "name": "54 ‏קבב הבית‎ (1x)",
+          "price": 900,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786689638477_4b5e25c7e5d0",
+          "name": "חוה עוף בגריל‎",
+          "price": 54,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786689638477_7ec1aa640403",
+          "name": "y  ‏חומוס שקשוקה‎",
+          "price": 35,
+          "category": "Food",
+          "claimedBy": [
+            "member_1786689671986_19f321638a51"
+          ]
+        },
+        {
+          "id": "item_1786689638477_1f1015ebee7c",
+          "name": "לימונענע גרוס‎",
+          "price": 25,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786689638477_1a3fb638d711",
+          "name": "סח'יכ‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786689638477_3b8d78ed6d32",
+          "name": "סה'יכ חשבון:‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786689789072
+    },
+    "sess_1786690705446_8556936b5550": {
+      "id": "sess_1786690705446_8556936b5550",
+      "code": "4316",
+      "storeName": "dagv",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 123,
+        "calculatedTotal": 123,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 123,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "settled",
+      "createdAt": 1786690705450,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "7d89677baf38a354b9c329933b5d28f628085590b53fa881034c4aff06762f1f"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786690705445_b9ba2ef35929",
+          "name": "booler",
+          "price": 123,
+          "category": "Item",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        }
+      ],
+      "updatedAt": 1786690711359,
+      "settledAt": 1786690711352
+    },
+    "sess_1786691129536_4e3d9f2d71dd": {
+      "id": "sess_1786691129536_4e3d9f2d71dd",
+      "code": "8639",
+      "storeName": "Porter  Sons",
+      "date": "26/07/2017",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 228.1,
+        "calculatedTotal": 228.1,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 228.1,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "settled",
+      "createdAt": 1786691129590,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "8b0e163dc545cac8455c33c798ccbeea936f5f033e704e20b02daa2246d00e95"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786691129531_4f2e30a8eccd",
+          "name": "S14369768    ‏ורטר אנד סאנ‎",
+          "price": 0.1,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_2d568622c21c",
+          "name": "nin",
+          "price": 14,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_5442e59f4c46",
+          "name": "חשברך לשרלחך‎",
+          "price": 3,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_fc6a1fe2e1ff",
+          "name": "פרימטור רריצן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_56e33b1e2231",
+          "name": "טריפל‎ TUM ‏שן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_94f5a69139a0",
+          "name": "נ,ולחון קברנה שוכניון‎ [",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_538755a8db77",
+          "name": "oom",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_fe28f45e1807",
+          "name": "המבורגר טבטוני שסקית‎",
+          "price": 9,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_7219d1565fea",
+          "name": "vam",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_6b31035f9eac",
+          "name": "גראנר פינאלה‎",
+          "price": 39,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786691147064,
+      "settledAt": 1786691147056
+    },
+    "sess_1786691945447_136c1d8697b6": {
+      "id": "sess_1786691945447_136c1d8697b6",
+      "code": "2753",
+      "storeName": "Audit Cafe",
+      "date": "2026-08-14",
+      "currency": "USD",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 8,
+        "calculatedTotal": 8,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 8,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786691945458,
+      "members": [
+        {
+          "id": "member_1786691945442_76917018a4de",
+          "name": "Auditor",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "75bf3295948201940d999403190d088fa1e8f49b682a08747e57f8bfea976b9d"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786691945423_e60727507317",
+          "name": "Cappuccino",
+          "price": 4.5,
+          "category": "Item",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691945436_f02cedcc8469",
+          "name": "Croissant",
+          "price": 3.5,
+          "category": "Item",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786691945464
+    },
+    "sess_1786692937907_b3eccbdfb70c": {
+      "id": "sess_1786692937907_b3eccbdfb70c",
+      "code": "9705",
+      "storeName": "Audit Cafe",
+      "date": "2026-08-14",
+      "currency": "USD",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 4.5,
+        "calculatedTotal": 4.5,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 4.5,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "settled",
+      "createdAt": 1786692937918,
+      "members": [
+        {
+          "id": "member_1786692937905_3c10a87e8e8e",
+          "name": "Auditor",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "795ea4b5d95a38744196e9eb5fe7ca973fe95db06f15cc4c7bd71fa30694e8bd"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786692937899_da29660e2af9",
+          "name": "Coffee",
+          "price": 4.5,
+          "category": "Item",
+          "claimedBy": [
+            "member_1786692937905_3c10a87e8e8e"
+          ]
+        }
+      ],
+      "updatedAt": 1786693029519,
+      "settledAt": 1786693029513
+    },
+    "sess_1786696330422_bb972e9551f0": {
+      "id": "sess_1786696330422_bb972e9551f0",
+      "code": "7771",
+      "storeName": "Porter  Sons",
+      "date": "26/07/2017",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 228.1,
+        "calculatedTotal": 228.1,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 228.1,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "settled",
+      "createdAt": 1786696330433,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "57a0d64becad648e9fb2bd8f6bc6d7ba2f88717c363a842378605eb77c5ca027"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786696330420_0c3b4e598d3e",
+          "name": "S14369768    ‏ורטר אנד סאנ‎",
+          "price": 0.1,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_fa3fce16e976",
+          "name": "nin",
+          "price": 14,
+          "category": "Food",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        },
+        {
+          "id": "item_1786696330420_c13e2051f563",
+          "name": "חשברך לשרלחך‎",
+          "price": 3,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_bbc8e79ec032",
+          "name": "פרימטור רריצן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_637c3526d8fa",
+          "name": "טריפל‎ TUM ‏שן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_f58497152409",
+          "name": "נ,ולחון קברנה שוכניון‎ [",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_9f3bfd092a80",
+          "name": "oom",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_9a494ef66a30",
+          "name": "המבורגר טבטוני שסקית‎",
+          "price": 9,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330421_e6d85ef72458",
+          "name": "vam",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330421_75563c079097",
+          "name": "גראנר פינאלה‎",
+          "price": 39,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786696416421,
+      "settledAt": 1786696416417
+    },
+    "sess_1786697310853_d8f2dc19576d": {
+      "id": "sess_1786697310853_d8f2dc19576d",
+      "code": "5270",
+      "storeName": "Maman Beach",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 1713,
+        "calculatedTotal": 1713,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 1713,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786697310873,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "e2a7d96b6061eb748f2fa13daf709a5f11f62a8578feb45d784b1a93d75b11cf"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786697310846_aee0181b7953",
+          "name": "E  i  P ‏ביצה בהרכבה עצמית\"‎",
+          "price": 45,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_2b3a0246f53d",
+          "name": "אייספסיכלורה‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_a99bb63f12e5",
+          "name": "אייס וניל‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_c9d05682ed34",
+          "name": "קולח‎ oe",
+          "price": 12,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_ede541179c2c",
+          "name": "54 ‏קבב הבית‎ (1x)",
+          "price": 900,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_e0d713d6adb2",
+          "name": "חוה עוף בגריל‎",
+          "price": 54,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_3be173c45846",
+          "name": "y  ‏חומוס שקשוקה‎",
+          "price": 35,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_34e82ac460a1",
+          "name": "לימונענע גרוס‎",
+          "price": 25,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310847_e035dd68a738",
+          "name": "סח'יכ‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786697310848_dfbc71e4aaa4",
+          "name": "סה'יכ חשבון:‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786697310882
+    },
+    "sess_1786702453238_32b29fe3687f": {
+      "id": "sess_1786702453238_32b29fe3687f",
+      "code": "4178",
+      "storeName": "Maman Beach",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 1713,
+        "calculatedTotal": 1713,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 1713,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786702453247,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "687ef12364fb8c27e0fd28d8bcfb541737586e90603f035d05ab7f4b41ce4ce3"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786702453232_28823441ee10",
+          "name": "E  i  P ‏ביצה בהרכבה עצמית\"‎",
+          "price": 45,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_a6c8c897af6a",
+          "name": "אייספסיכלורה‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_e0f724eb16a1",
+          "name": "אייס וניל‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_0ea0c1e8a468",
+          "name": "קולח‎ oe",
+          "price": 12,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_7a58b77709e5",
+          "name": "54 ‏קבב הבית‎ (1x)",
+          "price": 900,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_fd7f95a2125c",
+          "name": "חוה עוף בגריל‎",
+          "price": 54,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_dc67eda7b156",
+          "name": "y  ‏חומוס שקשוקה‎",
+          "price": 35,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_ca2f951dc45c",
+          "name": "לימונענע גרוס‎",
+          "price": 25,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_84a55a74f257",
+          "name": "סח'יכ‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786702453233_399b10364f5f",
+          "name": "סה'יכ חשבון:‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786702453254
+    },
+    "sess_1786704032281_e9b268bc83bd": {
+      "id": "sess_1786704032281_e9b268bc83bd",
+      "code": "8664",
+      "storeName": "Maman Beach",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 1713,
+        "calculatedTotal": 1713,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 1713,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786704032289,
+      "members": [
+        {
+          "id": "member_1786704032280_ff301b53b79a",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "df14efc813c42209fea6507274df3d0185ff0ab73a44d7faa8d7a91b656f863c"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786704032276_7464b17b8776",
+          "name": "E  i  P ‏ביצה בהרכבה עצמית\"‎",
+          "price": 45,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_f0d86518fed7",
+          "name": "אייספסיכלורה‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_75377df295fa",
+          "name": "אייס וניל‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_0b85f38184e4",
+          "name": "קולח‎ oe",
+          "price": 12,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_1b8c2b7f67e8",
+          "name": "54 ‏קבב הבית‎ (1x)",
+          "price": 900,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_7c0fe47519a2",
+          "name": "חוה עוף בגריל‎",
+          "price": 54,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_9931d26ac0fd",
+          "name": "y  ‏חומוס שקשוקה‎",
+          "price": 35,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_2be9ecf203b9",
+          "name": "לימונענע גרוס‎",
+          "price": 25,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_99185f666c20",
+          "name": "סח'יכ‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704032277_130c4865c36a",
+          "name": "סה'יכ חשבון:‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786704032297
+    },
+    "sess_1786704188597_eae20f8ea090": {
+      "id": "sess_1786704188597_eae20f8ea090",
+      "code": "7437",
+      "storeName": "Maman Beach",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 1713,
+        "calculatedTotal": 1713,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 1713,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786704188605,
+      "members": [
+        {
+          "id": "member_1786704188596_23f8d5137810",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "8c38ee960effd3a7f0c66c2c50fff76111f891254c896342b3285776e22420ad"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786704188593_d899db156e04",
+          "name": "E  i  P ‏ביצה בהרכבה עצמית\"‎",
+          "price": 45,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_d3d42057eca7",
+          "name": "אייספסיכלורה‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_2c16dafbc90f",
+          "name": "אייס וניל‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_a9556cd14b8f",
+          "name": "קולח‎ oe",
+          "price": 12,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_692485758f36",
+          "name": "54 ‏קבב הבית‎ (1x)",
+          "price": 900,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_42de16dd4909",
+          "name": "חוה עוף בגריל‎",
+          "price": 54,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_47aa43e8f6c6",
+          "name": "y  ‏חומוס שקשוקה‎",
+          "price": 35,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_fba1ef22c0d4",
+          "name": "לימונענע גרוס‎",
+          "price": 25,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_b77d316f98f5",
+          "name": "סח'יכ‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704188594_2f1d96018a93",
+          "name": "סה'יכ חשבון:‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786704188613
+    },
+    "sess_1786704492083_959cc6462be3": {
+      "id": "sess_1786704492083_959cc6462be3",
+      "code": "1469",
+      "storeName": "Maman Beach",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 1410,
+        "calculatedTotal": 1410,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 1410,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786704492095,
+      "members": [
+        {
+          "id": "member_1786704492083_cd545b807610",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "3897925ef80834532b6e06614172fd3f480b3c60cdde55b54a04fa970774d0f8"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786704492080_c75456f2264e",
+          "name": "E  i  P ‏ביצה בהרכבה עצמית\"‎",
+          "price": 45,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492080_2e28083afb7f",
+          "name": "אייספסיכלורה‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492080_9189a8d291d5",
+          "name": "אייס וניל‎",
+          "price": 18,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492080_b895fc16a494",
+          "name": "קולח‎ oe",
+          "price": 12,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492080_83c3a7cdb900",
+          "name": "54 ‏קבב הבית‎ (1x)",
+          "price": 900,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492080_b256eec0657d",
+          "name": "חוה עוף בגריל‎",
+          "price": 54,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492080_2c24d64e3dff",
+          "name": "y  ‏חומוס שקשוקה‎",
+          "price": 35,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492080_c2af06ab518e",
+          "name": "לימונענע גרוס‎",
+          "price": 25,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704492081_7ced35145661",
+          "name": "סה'יכ חשבון:‎",
+          "price": 303,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786704492100
+    },
+    "sess_1786704516156_765aeef86663": {
+      "id": "sess_1786704516156_765aeef86663",
+      "code": "8123",
+      "storeName": "Porter  Sons",
+      "date": "26/07/2017",
+      "currency": "NIS",
+      "receiptTotal": null,
+      "subtotal": null,
+      "tax": null,
+      "service": null,
+      "discount": null,
+      "reconciliation": {
+        "status": "missing_total",
+        "itemTotal": 228.1,
+        "calculatedTotal": 228.1,
+        "receiptTotal": null,
+        "subtotal": 0,
+        "tax": 0,
+        "service": 0,
+        "discount": 0,
+        "difference": null,
+        "subtotalDifference": 228.1,
+        "needsReview": true
+      },
+      "hostPhone": "",
+      "status": "active",
+      "createdAt": 1786704516162,
+      "members": [
+        {
+          "id": "member_1786704516156_68f8a907cd76",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "de3018cf49828cd3a714e75c8897c3c1e9f68c1800a187dcb354b5818d4cea65"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786704516155_ffe76096912b",
+          "name": "S14369768    ‏ורטר אנד סאנ‎",
+          "price": 0.1,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_5de9a5451ad0",
+          "name": "nin",
+          "price": 14,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_b8be0ac40746",
+          "name": "חשברך לשרלחך‎",
+          "price": 3,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_b648a4feaa42",
+          "name": "פרימטור רריצן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_05637dd743f2",
+          "name": "טריפל‎ TUM ‏שן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_06517479f711",
+          "name": "נ,ולחון קברנה שוכניון‎ [",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_5e92187a37e3",
+          "name": "oom",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_41052ddfbb29",
+          "name": "המבורגר טבטוני שסקית‎",
+          "price": 9,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_0628024b100b",
+          "name": "vam",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786704516155_f8ee0789fac8",
+          "name": "גראנר פינאלה‎",
+          "price": 39,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "updatedAt": 1786704516172
     }
   },
   "users": {
@@ -7939,7 +9341,7 @@
       ],
       "createdAt": 1786475121484,
       "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocIi9Gakn4CRu0ZekqnruYBBGR7vPnk8UqZ-VgL31Ql5V8o6-w=s96-c",
-      "updatedAt": 1786478715137
+      "updatedAt": 1786690732034
     },
     "Naor Walach": {
       "id": "Naor Walach",
@@ -8072,22 +9474,567 @@
       "phone": "0847124214",
       "avatarColor": "#7C3AED",
       "settings": {
-        "language": "en",
+        "language": "he",
         "currency": "NIS",
         "theme": "dark",
         "customGeminiKey": "",
         "ocrEngine": "tesseract"
       },
-      "bills": [],
+      "bills": [
+        {
+          "id": "sess_1786696330422_bb972e9551f0",
+          "storeName": "Porter  Sons",
+          "date": "26/07/2017",
+          "currency": "NIS",
+          "totalAmount": 228.1,
+          "membersCount": 1,
+          "members": [
+            {
+              "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+              "name": "Naor Walach",
+              "phone": "",
+              "isHost": true,
+              "settled": false,
+              "avatarColor": "#A3E635"
+            }
+          ],
+          "items": [
+            {
+              "id": "item_1786696330420_0c3b4e598d3e",
+              "name": "S14369768    ‏ורטר אנד סאנ‎",
+              "price": 0.1,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330420_fa3fce16e976",
+              "name": "nin",
+              "price": 14,
+              "category": "Food",
+              "claimedBy": [
+                "xLsTB7byVXSHntIKOiZrvocZHvo2"
+              ]
+            },
+            {
+              "id": "item_1786696330420_c13e2051f563",
+              "name": "חשברך לשרלחך‎",
+              "price": 3,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330420_bbc8e79ec032",
+              "name": "פרימטור רריצן‎",
+              "price": 15,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330420_637c3526d8fa",
+              "name": "טריפל‎ TUM ‏שן‎",
+              "price": 15,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330420_f58497152409",
+              "name": "נ,ולחון קברנה שוכניון‎ [",
+              "price": 15,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330420_9f3bfd092a80",
+              "name": "oom",
+              "price": 59,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330420_9a494ef66a30",
+              "name": "המבורגר טבטוני שסקית‎",
+              "price": 9,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330421_e6d85ef72458",
+              "name": "vam",
+              "price": 59,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786696330421_75563c079097",
+              "name": "גראנר פינאלה‎",
+              "price": 39,
+              "category": "Food",
+              "claimedBy": []
+            }
+          ],
+          "tipPercentage": 0,
+          "settledAt": 1786696416417,
+          "createdAt": 1786696330433
+        },
+        {
+          "id": "sess_1786691129536_4e3d9f2d71dd",
+          "storeName": "Porter  Sons",
+          "date": "26/07/2017",
+          "currency": "NIS",
+          "totalAmount": 228.1,
+          "membersCount": 1,
+          "members": [
+            {
+              "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+              "name": "Naor Walach",
+              "phone": "",
+              "isHost": true,
+              "settled": false,
+              "avatarColor": "#A3E635"
+            }
+          ],
+          "items": [
+            {
+              "id": "item_1786691129531_4f2e30a8eccd",
+              "name": "S14369768    ‏ורטר אנד סאנ‎",
+              "price": 0.1,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_2d568622c21c",
+              "name": "nin",
+              "price": 14,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_5442e59f4c46",
+              "name": "חשברך לשרלחך‎",
+              "price": 3,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_fc6a1fe2e1ff",
+              "name": "פרימטור רריצן‎",
+              "price": 15,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_56e33b1e2231",
+              "name": "טריפל‎ TUM ‏שן‎",
+              "price": 15,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_94f5a69139a0",
+              "name": "נ,ולחון קברנה שוכניון‎ [",
+              "price": 15,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_538755a8db77",
+              "name": "oom",
+              "price": 59,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_fe28f45e1807",
+              "name": "המבורגר טבטוני שסקית‎",
+              "price": 9,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_7219d1565fea",
+              "name": "vam",
+              "price": 59,
+              "category": "Food",
+              "claimedBy": []
+            },
+            {
+              "id": "item_1786691129534_6b31035f9eac",
+              "name": "גראנר פינאלה‎",
+              "price": 39,
+              "category": "Food",
+              "claimedBy": []
+            }
+          ],
+          "tipPercentage": 0,
+          "settledAt": 1786691147056,
+          "createdAt": 1786691129590
+        },
+        {
+          "id": "sess_1786690705446_8556936b5550",
+          "storeName": "dagv",
+          "date": "2026-08-14",
+          "currency": "NIS",
+          "totalAmount": 123,
+          "membersCount": 1,
+          "members": [
+            {
+              "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+              "name": "Naor Walach",
+              "phone": "",
+              "isHost": true,
+              "settled": false,
+              "avatarColor": "#A3E635"
+            }
+          ],
+          "items": [
+            {
+              "id": "item_1786690705445_b9ba2ef35929",
+              "name": "booler",
+              "price": 123,
+              "category": "Item",
+              "claimedBy": [
+                "xLsTB7byVXSHntIKOiZrvocZHvo2"
+              ]
+            }
+          ],
+          "tipPercentage": 0,
+          "settledAt": 1786690711352,
+          "createdAt": 1786690705450
+        },
+        {
+          "id": "sess_1786689527937_054f199d6fa6",
+          "storeName": "hdfhfh",
+          "date": "2026-08-14",
+          "currency": "NIS",
+          "totalAmount": 325,
+          "membersCount": 1,
+          "members": [
+            {
+              "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+              "name": "Naor Walach",
+              "phone": "",
+              "isHost": true,
+              "settled": false,
+              "avatarColor": "#A3E635"
+            }
+          ],
+          "items": [
+            {
+              "id": "item_1786689527936_cd8e50d29b64",
+              "name": "dsgsdag",
+              "price": 325,
+              "category": "Item",
+              "claimedBy": [
+                "xLsTB7byVXSHntIKOiZrvocZHvo2"
+              ]
+            }
+          ],
+          "tipPercentage": 0,
+          "settledAt": 1786689540018,
+          "createdAt": 1786689527942
+        }
+      ],
       "groups": [
         "grp_1786477653880_8b8us"
       ],
       "createdAt": 1786475121484,
       "avatarUrl": "https://lh3.googleusercontent.com/a/ACg8ocIi9Gakn4CRu0ZekqnruYBBGR7vPnk8UqZ-VgL31Ql5V8o6-w=s96-c",
-      "updatedAt": 1786511566808
+      "updatedAt": 1786702915304,
+      "hiddenHistoryIds": [
+        "sess_1786690705446_8556936b5550",
+        "sess_1786689527937_054f199d6fa6",
+        "sess_1786691129536_4e3d9f2d71dd",
+        "sess_1786696330422_bb972e9551f0",
+        "sess_g_bill_1786478201576_hyh",
+        "sess_1786475631569_eqw6x"
+      ]
     }
   },
   "history": [
+    {
+      "id": "sess_1786696330422_bb972e9551f0",
+      "storeName": "Porter  Sons",
+      "date": "26/07/2017",
+      "currency": "NIS",
+      "totalAmount": 228.1,
+      "membersCount": 1,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786696330420_0c3b4e598d3e",
+          "name": "S14369768    ‏ורטר אנד סאנ‎",
+          "price": 0.1,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_fa3fce16e976",
+          "name": "nin",
+          "price": 14,
+          "category": "Food",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        },
+        {
+          "id": "item_1786696330420_c13e2051f563",
+          "name": "חשברך לשרלחך‎",
+          "price": 3,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_bbc8e79ec032",
+          "name": "פרימטור רריצן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_637c3526d8fa",
+          "name": "טריפל‎ TUM ‏שן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_f58497152409",
+          "name": "נ,ולחון קברנה שוכניון‎ [",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_9f3bfd092a80",
+          "name": "oom",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330420_9a494ef66a30",
+          "name": "המבורגר טבטוני שסקית‎",
+          "price": 9,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330421_e6d85ef72458",
+          "name": "vam",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786696330421_75563c079097",
+          "name": "גראנר פינאלה‎",
+          "price": 39,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "tipPercentage": 0,
+      "settledAt": 1786696416417,
+      "createdAt": 1786696330433
+    },
+    {
+      "id": "sess_1786692937907_b3eccbdfb70c",
+      "storeName": "Audit Cafe",
+      "date": "2026-08-14",
+      "currency": "USD",
+      "totalAmount": 4.5,
+      "membersCount": 1,
+      "members": [
+        {
+          "id": "member_1786692937905_3c10a87e8e8e",
+          "name": "Auditor",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786692937899_da29660e2af9",
+          "name": "Coffee",
+          "price": 4.5,
+          "category": "Item",
+          "claimedBy": [
+            "member_1786692937905_3c10a87e8e8e"
+          ]
+        }
+      ],
+      "tipPercentage": 0,
+      "settledAt": 1786693029513,
+      "createdAt": 1786692937918
+    },
+    {
+      "id": "sess_1786691129536_4e3d9f2d71dd",
+      "storeName": "Porter  Sons",
+      "date": "26/07/2017",
+      "currency": "NIS",
+      "totalAmount": 228.1,
+      "membersCount": 1,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786691129531_4f2e30a8eccd",
+          "name": "S14369768    ‏ורטר אנד סאנ‎",
+          "price": 0.1,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_2d568622c21c",
+          "name": "nin",
+          "price": 14,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_5442e59f4c46",
+          "name": "חשברך לשרלחך‎",
+          "price": 3,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_fc6a1fe2e1ff",
+          "name": "פרימטור רריצן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_56e33b1e2231",
+          "name": "טריפל‎ TUM ‏שן‎",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_94f5a69139a0",
+          "name": "נ,ולחון קברנה שוכניון‎ [",
+          "price": 15,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_538755a8db77",
+          "name": "oom",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_fe28f45e1807",
+          "name": "המבורגר טבטוני שסקית‎",
+          "price": 9,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_7219d1565fea",
+          "name": "vam",
+          "price": 59,
+          "category": "Food",
+          "claimedBy": []
+        },
+        {
+          "id": "item_1786691129534_6b31035f9eac",
+          "name": "גראנר פינאלה‎",
+          "price": 39,
+          "category": "Food",
+          "claimedBy": []
+        }
+      ],
+      "tipPercentage": 0,
+      "settledAt": 1786691147056,
+      "createdAt": 1786691129590
+    },
+    {
+      "id": "sess_1786690705446_8556936b5550",
+      "storeName": "dagv",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "totalAmount": 123,
+      "membersCount": 1,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786690705445_b9ba2ef35929",
+          "name": "booler",
+          "price": 123,
+          "category": "Item",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        }
+      ],
+      "tipPercentage": 0,
+      "settledAt": 1786690711352,
+      "createdAt": 1786690705450
+    },
+    {
+      "id": "sess_1786689527937_054f199d6fa6",
+      "storeName": "hdfhfh",
+      "date": "2026-08-14",
+      "currency": "NIS",
+      "totalAmount": 325,
+      "membersCount": 1,
+      "members": [
+        {
+          "id": "xLsTB7byVXSHntIKOiZrvocZHvo2",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": true,
+          "settled": false,
+          "avatarColor": "#A3E635"
+        }
+      ],
+      "items": [
+        {
+          "id": "item_1786689527936_cd8e50d29b64",
+          "name": "dsgsdag",
+          "price": 325,
+          "category": "Item",
+          "claimedBy": [
+            "xLsTB7byVXSHntIKOiZrvocZHvo2"
+          ]
+        }
+      ],
+      "tipPercentage": 0,
+      "settledAt": 1786689540018,
+      "createdAt": 1786689527942
+    },
     {
       "id": "sess_g_bill_1786478201576_hyh",
       "storeName": "Maman Beach & Red Sea Hotel",
@@ -8727,6 +10674,16 @@
           "phone": "",
           "isHost": true,
           "avatarColor": "#A3E635"
+        },
+        {
+          "id": "member_1786690732030_cf587920eb47",
+          "name": "Naor Walach",
+          "phone": "",
+          "isHost": false,
+          "settled": false,
+          "avatarColor": "#A3E635",
+          "accessTokenHash": "",
+          "active": false
         }
       ],
       "bills": [
@@ -8806,7 +10763,7 @@
           ]
         }
       ],
-      "updatedAt": 1786478321677
+      "updatedAt": 1786702966308
     }
   }
 }
