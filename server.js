@@ -122,7 +122,15 @@ function getLocalNetworkIp() {
 app.prepare().then(() => {
   const server = express();
   const httpServer = http.createServer(server);
-  const wss = new WebSocket.Server({ server: httpServer, maxPayload: 10_000 });
+  const wss = new WebSocket.Server({ noServer: true, maxPayload: 10_000 });
+
+  httpServer.on('upgrade', (request, socket, head) => {
+    if (request.url && !request.url.startsWith('/_next')) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    }
+  });
 
   server.use(express.json({ limit: '15mb' }));
 
