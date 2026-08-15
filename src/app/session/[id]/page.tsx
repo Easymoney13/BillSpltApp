@@ -25,7 +25,8 @@ import {
   Pencil,
   Trash2,
   Link2,
-  Share2
+  Share2,
+  CreditCard
 } from 'lucide-react';
 import { useLanguage } from '../../../components/LanguageContext';
 import { QRCodeModal } from '../../../components/QRCodeModal';
@@ -313,10 +314,14 @@ function SessionWorkspaceInner() {
     }
   }, [session, currentMemberId]);
 
-  // Auto-add group to user's saved active groups when visiting a bill associated with a group
+  // Auto-add group to user's saved active groups ONLY IF user hasn't explicitly left/deleted it
   useEffect(() => {
     const targetGroupId = session?.groupId;
     if (targetGroupId) {
+      const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
+      const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+      if (deletedIds.includes(targetGroupId)) return;
+
       fetch(`/api/groups/${targetGroupId}`)
         .then((res) => res.json())
         .then((data) => {
@@ -514,8 +519,13 @@ function SessionWorkspaceInner() {
   const isCurrentUserHost = Boolean(currentMember?.isHost);
   const isSessionClosed = session?.status === 'settled';
 
-  const hostPaymentPhone = session?.hostPhone || hostMember?.phone || '';
-  const canPayHost = isValidIsraeliPhone(hostPaymentPhone);
+  const activePayerId = session?.payerId || 'each';
+  const isEachPaid = activePayerId === 'each';
+  const payerMember = !isEachPaid ? validMembers.find((m: any) => m?.id === activePayerId) : null;
+  const activePayerName = payerMember?.name || (isEachPaid ? t('eachPaidShare', undefined, 'Each paid their own share') : (session?.hostName || hostMember?.name || 'Host'));
+  const activePayerPhone = payerMember?.phone || (payerMember?.isHost ? session?.hostPhone : (hostMember?.phone || ''));
+  const isMePayer = !isEachPaid && activePayerId === currentMemberId;
+  const canPayPayer = isValidIsraeliPhone(activePayerPhone);
 
   const triggerCelebration = () => {
     try {
@@ -675,6 +685,37 @@ function SessionWorkspaceInner() {
             <span>{t('attachBillTitle', undefined, 'Attach Bill to Group')} 🔗</span>
           </button>
         )}
+
+        {/* Dedicated "Who paid for the bill?" Selector Bar */}
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-[#7C3AED] shrink-0" />
+            <div>
+              <span className="font-extrabold text-slate-900 dark:text-white block leading-tight text-[11px]">
+                {t('whoPaidLabel', undefined, 'Who paid the bill?')}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-none">
+                {isEachPaid
+                  ? t('eachPaidShareSub', undefined, 'Each pays their own share directly')
+                  : t('singlePayerSub', { name: activePayerName }, `${activePayerName} paid upfront`)}
+              </span>
+            </div>
+          </div>
+
+          <select
+            value={activePayerId}
+            onChange={(e) => sendAction('SET_PAYER', { payerId: e.target.value })}
+            disabled={isSessionClosed}
+            className="py-1 px-2.5 rounded-lg bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white shadow-xs focus:ring-1 focus:ring-purple-500 cursor-pointer max-w-[170px]"
+          >
+            <option value="each">👥 {t('eachPaidShareOption', undefined, 'Each paid their share')}</option>
+            {validMembers.map((m: any) => (
+              <option key={m.id} value={m.id}>
+                👤 {m.name} {m.id === currentMemberId ? t('youSuffix', undefined, '(You)') : ''} {m.isHost ? `[${t('hostBadge', undefined, 'HOST')}]` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Shared Receipt Items Section */}
@@ -1179,71 +1220,124 @@ function SessionWorkspaceInner() {
                 </div>
               </div>
 
-              {/* Instant Payment Transfer Options */}
-              {!currentMember?.isHost && canPayHost && (
+              {/* Who Paid Selector inside Settle Modal */}
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-[#7C3AED]" />
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      {t('whoPaidLabel', undefined, 'Who paid the bill?')}
+                    </span>
+                  </div>
+                  <select
+                    value={activePayerId}
+                    onChange={(e) => sendAction('SET_PAYER', { payerId: e.target.value })}
+                    className="py-1 px-2.5 rounded-lg bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="each">👥 {t('eachPaidShareOption', undefined, 'Each paid their share')}</option>
+                    {validMembers.map((m: any) => (
+                      <option key={m.id} value={m.id}>
+                        👤 {m.name} {m.id === currentMemberId ? t('youSuffix', undefined, '(You)') : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                  {isEachPaid
+                    ? t('eachPaidShareModalNote', undefined, 'Everyone pays the vendor directly. Mark your share once paid.')
+                    : isMePayer
+                    ? t('youArePayerNote', undefined, 'You paid upfront! Other room members will settle their shares with you.')
+                    : t('settleWithPayerNote', { name: activePayerName }, `Please send your share to ${activePayerName}.`)}
+                </p>
+              </div>
+
+              {/* Instant Payment Transfer Options to Payer (when someone specific paid upfront) */}
+              {!isEachPaid && !isMePayer && (
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block">
-                    {t('payHostTitle', { hostName: hostMember?.name || 'Host' }, `Pay Room Host (${hostMember?.name || 'Host'})`)}
+                    {t('payPayerTitle', { name: activePayerName }, `Pay ${activePayerName}`)}
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerBitPayment({
-                          phone: hostPaymentPhone,
-                          amount: finalDueVal,
-                          storeName: session?.storeName || 'BillSplit Room'
-                        });
-                      }}
-                      className="py-3 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
-                    >
-                      <span>{t('payWithBitBtn', undefined, 'Pay with Bit 📲')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const phone = hostPaymentPhone.replace(/\D/g, '');
-                        const amount = finalDueVal.toFixed(2);
-                        try {
-                          navigator.clipboard.writeText(`${phone} ${amount}`);
-                        } catch (e) {}
-                        const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                        if (isMobile) {
-                          window.location.href = `paybox://pay?phone=${phone}&amount=${amount}`;
-                          setTimeout(() => {
+                  {canPayPayer ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerBitPayment({
+                            phone: activePayerPhone,
+                            amount: finalDueVal,
+                            storeName: session?.storeName || 'BillSplit Room'
+                          });
+                        }}
+                        className="py-3 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
+                      >
+                        <span>{t('payWithBitBtn', undefined, 'Pay with Bit 📲')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const phone = activePayerPhone.replace(/\D/g, '');
+                          const amount = finalDueVal.toFixed(2);
+                          try {
+                            navigator.clipboard.writeText(`${phone} ${amount}`);
+                          } catch (e) {}
+                          const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                          if (isMobile) {
+                            window.location.href = `paybox://pay?phone=${phone}&amount=${amount}`;
+                            setTimeout(() => {
+                              window.open(`https://payboxapp.page.link/pay?phone=${phone}&amount=${amount}`, '_blank');
+                            }, 800);
+                          } else {
                             window.open(`https://payboxapp.page.link/pay?phone=${phone}&amount=${amount}`, '_blank');
-                          }, 800);
-                        } else {
-                          window.open(`https://payboxapp.page.link/pay?phone=${phone}&amount=${amount}`, '_blank');
-                        }
-                      }}
-                      className="py-3 px-4 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
-                    >
-                      <span>{t('payWithPayboxBtn', undefined, 'Pay with Paybox 📦')}</span>
-                    </button>
-                  </div>
+                          }
+                        }}
+                        className="py-3 px-4 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
+                      >
+                        <span>{t('payWithPayboxBtn', undefined, 'Pay with Paybox 📦')}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                      {t('paymentPhoneMissingPayer', { name: activePayerName }, `Bit and PayBox will become available after ${activePayerName} adds a valid payment phone number.`)}
+                    </p>
+                  )}
                 </div>
-              )}
-              {!currentMember?.isHost && !canPayHost && (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                  {t('paymentPhoneMissing', undefined, 'Bit and PayBox will become available after the host adds a valid payment phone number.')}
-                </p>
               )}
 
               {/* Settle Action Buttons */}
               <div className="pt-3">
                 <button
                   onClick={async () => {
-                    const success = isCurrentUserHost
-                      ? await sendAction('SETTLE_ALL', {})
-                      : await sendAction('TOGGLE_SETTLED', { memberId: currentMemberId, settled: true });
+                    const success = await sendAction('SETTLE_ALL', {});
                     if (!success) return;
+
+                    // Immediately record into local history for instant display in History page
+                    try {
+                      const userKey = (profile?.displayName || '').trim().toLowerCase();
+                      const existingLocal = localStorage.getItem(`billsplit_history_${userKey}`);
+                      const localList = existingLocal ? JSON.parse(existingLocal) : [];
+                      const histRecord = {
+                        id: session.id,
+                        storeName: session.storeName || 'Bill Session',
+                        date: session.date || new Date().toISOString().split('T')[0],
+                        totalAmount: memberCalculations.grandTotal || 0,
+                        userShare: finalDueVal || memberCalculations.myShare || 0,
+                        currency: session.currency || 'NIS',
+                        membersCount: validMembers.length,
+                        groupId: session.groupId,
+                        payerName: activePayerName,
+                        createdAt: Date.now(),
+                      };
+                      const filteredLocal = Array.isArray(localList) ? localList.filter((h: any) => h.id !== session.id) : [];
+                      filteredLocal.unshift(histRecord);
+                      localStorage.setItem(`billsplit_history_${userKey}`, JSON.stringify(filteredLocal));
+                    } catch (e) {
+                      console.error('Error saving local history:', e);
+                    }
+
                     triggerCelebration();
                     setShowSettleModal(false);
-                    if (isCurrentUserHost) {
-                      localStorage.removeItem('billsplit_active_session');
-                      setTimeout(() => router.push('/?tab=history'), 1200);
-                    }
+                    localStorage.removeItem('billsplit_active_session');
+                    setTimeout(() => router.push('/?tab=history'), 1200);
                   }}
                   className="w-full py-4 rounded-full bg-gradient-to-r from-[#7C3AED] via-[#6366F1] to-[#4F46E5] text-white font-extrabold text-sm shadow-[0_8px_24px_rgba(124,58,237,0.3)] hover:shadow-[0_8px_24px_rgba(124,58,237,0.5)] flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
                 >

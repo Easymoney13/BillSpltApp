@@ -320,3 +320,13 @@ test('session settlement persists the closed session and history in one database
   delete require.cache[require.resolve('../lib/db')];
   fs.rmSync(temporaryDirectory, { recursive: true });
 });
+
+test('session SET_PAYER allows any member or each paid share', () => {
+  const session = sampleSession();
+  const updatedHost = processSessionAction(session, 'SET_PAYER', { payerId: 'member-1' }, { memberId: 'host-1' });
+  assert.equal(updatedHost.payerId, 'member-1');
+
+  const updatedEach = processSessionAction(session, 'SET_PAYER', { payerId: 'each' }, { memberId: 'member-1' });
+  assert.equal(updatedEach.payerId, 'each');
+});
+

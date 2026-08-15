@@ -22,7 +22,10 @@ import {
   ChevronDown,
   ChevronUp,
   LogOut,
-  X
+  X,
+  Share2,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useLanguage } from '../../../components/LanguageContext';
 import { QRCodeModal } from '../../../components/QRCodeModal';
@@ -51,6 +54,7 @@ export default function GroupWorkspacePage() {
   const [showCamera, setShowCamera] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showStartSplitModal, setShowStartSplitModal] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   // Edit Bill State
   const [editingBill, setEditingBill] = useState<any>(null);
@@ -87,8 +91,20 @@ export default function GroupWorkspacePage() {
         if (!initialRes.ok || !initialData.group) throw new Error(initialData.error || 'Group not found');
         const resolvedId = initialData.group.id;
         const existingToken = getRoomToken('group', resolvedId) || getRoomToken('group', groupId);
-        if (existingToken && !getRoomToken('group', resolvedId)) {
-          saveRoomCredentials('group', resolvedId, '', existingToken);
+        const existingMember = (initialData.group.members || []).find((m: any) => 
+          (m.name && m.name.toLowerCase().trim() === (profile.displayName || '').toLowerCase().trim())
+        );
+        if (existingToken && existingMember) {
+          saveRoomCredentials('group', resolvedId, existingMember.id, existingToken);
+          if (!disposed) {
+            setCurrentMemberId(existingMember.id);
+            setGroup(initialData.group);
+            setFetchError(null);
+            connectWebSocket(resolvedId, existingToken);
+            interval = setInterval(() => fetchGroupData(resolvedId), 15_000);
+            if (resolvedId !== groupId) router.replace(`/group/${resolvedId}`);
+          }
+          return;
         }
 
         const joinRes = await fetch('/api/groups/join', {
@@ -361,10 +377,48 @@ export default function GroupWorkspacePage() {
     }
   };
 
-  const validMembers = Array.isArray(group?.members) ? group.members.filter((member: any) => member.active !== false) : [];
+  const handleCopyInviteLink = () => {
+    if (!group) return;
+    const url = `${window.location.origin}/group/${group.code || group.id}`;
+    try {
+      navigator.clipboard.writeText(url);
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2500);
+      triggerHaptic('light');
+    } catch (e) {}
+  };
+
+  const validMembers = useMemo(() => {
+    const raw = Array.isArray(group?.members) ? group.members.filter((member: any) => member && member.active !== false) : [];
+    const seen = new Set();
+    const result: any[] = [];
+    for (const m of raw) {
+      const key = (m.id || '') + '___' + (m.name || '').trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(m);
+      }
+    }
+    return result;
+  }, [group?.members]);
+
   const validBills = Array.isArray(group?.bills) ? group.bills : [];
   const minimizedTransactions = Array.isArray(group?.minimizedTransactions) ? group.minimizedTransactions : [];
-  const balances = Array.isArray(group?.balances) ? group.balances : [];
+
+  const balances = useMemo(() => {
+    const raw = Array.isArray(group?.balances) ? group.balances : [];
+    const seen = new Set();
+    const result: any[] = [];
+    for (const b of raw) {
+      const key = (b.memberId || '') + '___' + (b.name || '').trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(b);
+      }
+    }
+    return result;
+  }, [group?.balances]);
+
   const unassignedAmount = Number(group?.unassignedAmount || 0);
   const isGroupHost = Boolean(validMembers.find((member: any) => member.id === currentMemberId)?.isHost);
 
@@ -533,16 +587,21 @@ export default function GroupWorkspacePage() {
       <header className="flex items-center justify-between py-2 border-b border-slate-200/80 dark:border-slate-800">
         <button
           onClick={() => router.push('/')}
-          className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-sm"
+          className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-sm active:scale-95"
         >
           <ChevronLeft className={`w-5 h-5 ${isRtl ? 'rotate-180' : ''}`} />
         </button>
 
         <div className="text-center">
           <h1 className="font-extrabold text-base text-slate-900 dark:text-white">{group.name}</h1>
-          <p className="text-xs font-mono text-slate-600 dark:text-slate-400 font-bold mt-0.5">
-            {t('codeLabel', undefined, 'Group Code')}: #{group.code}
-          </p>
+          <button
+            onClick={() => setShowQrModal(true)}
+            className="inline-flex items-center gap-1 text-xs font-mono text-purple-600 dark:text-purple-400 font-bold hover:underline"
+            title="Tap to Share Group"
+          >
+            <QrCode className="w-3 h-3" />
+            <span>#{group.code}</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -556,10 +615,11 @@ export default function GroupWorkspacePage() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="w-9 h-9 rounded-full bg-[#7C3AED] text-white flex items-center justify-center hover:bg-indigo-700 transition-colors shadow-sm font-bold active:scale-95"
+            className="py-1.5 px-3 rounded-full bg-[#7C3AED] hover:bg-indigo-700 text-white flex items-center gap-1.5 transition-all shadow-sm font-bold text-xs active:scale-95"
             title="Share Group"
           >
-            <QrCode className="w-4 h-4" />
+            <Share2 className="w-3.5 h-3.5" />
+            <span>{t('shareBtn', undefined, 'Share')}</span>
           </button>
 
           <button
@@ -576,12 +636,27 @@ export default function GroupWorkspacePage() {
                   });
                   const data = await res.json();
                   if (!res.ok) throw new Error(data.error || 'Could not leave group');
+
+                  // Add to deleted group IDs so it never re-appears in active groups
+                  const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
+                  const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+                  if (!deletedIds.includes(group.id)) {
+                    deletedIds.push(group.id);
+                    localStorage.setItem('billsplit_deleted_group_ids', JSON.stringify(deletedIds));
+                  }
+
                   const cookieGroups = getCookie('billsplit_user_groups');
                   const localGroups = localStorage.getItem('billsplit_user_groups');
                   const rawGroups = cookieGroups || (localGroups ? JSON.parse(localGroups) : []);
                   const updated = Array.isArray(rawGroups) ? rawGroups.filter((g: any) => g.id !== group.id) : [];
                   setCookie('billsplit_user_groups', updated);
                   localStorage.setItem('billsplit_user_groups', JSON.stringify(updated));
+
+                  const userKey = (profile?.displayName || '').trim().toLowerCase();
+                  if (userKey) {
+                    localStorage.setItem(`billsplit_user_groups_${userKey}`, JSON.stringify(updated));
+                  }
+
                   clearRoomCredentials('group', group.id);
                   router.push('/');
                 } catch (err) {
@@ -836,47 +911,47 @@ export default function GroupWorkspacePage() {
                   className="shadow-sm"
                 >
                   <div
-                    className="photo-card bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-[#222C3D] overflow-hidden transition-all"
+                    className="photo-card bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-[#222C3D] overflow-hidden transition-all shadow-xs"
                   >
                     <div
                       onClick={() => setExpandedBillId(isExpanded ? null : bill.id)}
-                      className="p-3 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
+                      className="p-3.5 space-y-2.5 cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
                     >
-                      <div className="space-y-0.5 min-w-0 pr-2 flex-1">
-                        {/* Row 1: Title (Full width, zero truncation!) */}
-                        <h4 className="font-extrabold text-slate-900 dark:text-white text-xs leading-tight truncate">
-                          {bill.title}
-                        </h4>
-                        {/* Row 2: Date & Live Session Badge */}
-                        <div className="flex items-center gap-2 pt-0.5">
-                          <span className="text-[10px] text-slate-400 font-mono font-medium leading-none">
-                            {bill.date}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const targetSessionId = bill.sessionId || `sess_g_${bill.id}`;
-                              saveRoomCredentials('session', targetSessionId, currentMemberId, getRoomToken('group', group.id));
-                              router.push(`/session/${targetSessionId}?groupId=${group.id}`);
-                            }}
-                            className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 font-extrabold text-[9px] hover:bg-indigo-200 transition-all flex items-center gap-0.5 shadow-xs active:scale-95 shrink-0"
-                            title="Open Live Claiming Session"
-                          >
-                            <Sparkles className="w-2.5 h-2.5" />
-                            <span>{t('liveSessionBtn', undefined, 'Live Session')}</span>
-                          </button>
+                      {/* Row 1: Title & Total Amount */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5 min-w-0 flex-1">
+                          <h4 className="font-extrabold text-slate-900 dark:text-white text-xs leading-tight truncate">
+                            {bill.title}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-tight">
+                            {bill.date} • {t('paidByLabel', { name: payerName }, `Paid by ${payerName}`)}
+                          </p>
                         </div>
-                        {/* Row 3: Who paid */}
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-tight">
-                          {t('paidByLabel', { name: payerName }, `Paid by ${payerName}`)}
-                        </p>
+
+                        <div className="shrink-0 text-right">
+                          <span className="font-mono font-black text-slate-900 dark:text-white text-xs">
+                            {bill.amount?.toFixed(2)} {group.currency || 'NIS'}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-mono font-black text-slate-900 dark:text-white text-xs">
-                          {bill.amount?.toFixed(2)} {group.currency || 'NIS'}
-                        </span>
+                      {/* Row 2: Bigger Centered Live Session Button */}
+                      <div className="pt-0.5 flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const targetSessionId = bill.sessionId || `sess_g_${bill.id}`;
+                            saveRoomCredentials('session', targetSessionId, currentMemberId, getRoomToken('group', group.id));
+                            router.push(`/session/${targetSessionId}?groupId=${group.id}`);
+                          }}
+                          className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#7C3AED] via-[#6366F1] to-[#4F46E5] hover:from-[#6D28D9] hover:to-[#4338CA] text-white font-extrabold text-xs shadow-md shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                          title="Open Live Claiming Session"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
+                          <span>{t('liveSessionBtn', undefined, 'Live Session')}</span>
+                          <ArrowRight className={`w-3.5 h-3.5 text-white/90 ${isRtl ? 'rotate-180' : ''}`} />
+                        </button>
                       </div>
                     </div>
 

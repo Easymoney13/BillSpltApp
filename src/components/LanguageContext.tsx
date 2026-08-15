@@ -13,6 +13,7 @@ interface UserProfile {
   displayName: string;
   avatarColor: string;
   avatarUrl?: string;
+  phoneNumber?: string;
 }
 
 interface LanguageContextType {
@@ -137,11 +138,13 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const rawProfile = localStorage.getItem('billsplit_local_profile');
       const parsedProfile = rawProfile ? JSON.parse(rawProfile) : null;
+      const localPhone = localStorage.getItem('billsplit_phone') || undefined;
       if (parsedProfile?.displayName) {
         savedLocalProfile = {
           displayName: String(parsedProfile.displayName),
           avatarColor: String(parsedProfile.avatarColor || '#7C3AED'),
           avatarUrl: typeof parsedProfile.avatarUrl === 'string' ? parsedProfile.avatarUrl : undefined,
+          phoneNumber: typeof parsedProfile.phoneNumber === 'string' ? parsedProfile.phoneNumber : localPhone,
         };
         setProfile(savedLocalProfile);
         setGuestName(savedLocalProfile.displayName);

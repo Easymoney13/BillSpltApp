@@ -74,6 +74,7 @@ export const translations: Record<string, Record<string, string>> = {
 
     // History Tab
     pastHistoryTitle: "Past Splits History",
+    recentBills: "Recent bills",
     noHistoryYet: "No settled splits yet. Completed splits will appear here.",
     deleteBtn: "Delete",
     storeLabel: "Store",
@@ -85,6 +86,8 @@ export const translations: Record<string, Record<string, string>> = {
     settingsTitle: "Account Settings",
     personalInfoSection: "Personal Info",
     displayNameLabel: "Display Name",
+    phoneNumberLabel: "Phone Number",
+    phoneInputPlaceholder: "050-1234567",
     phoneLabel: "Phone Number (for Bit/Paybox transfers)",
     phoneHint: "Required to receive payments from group members",
     preferencesSection: "Preferences",
@@ -281,6 +284,7 @@ export const translations: Record<string, Record<string, string>> = {
 
     // History Tab
     pastHistoryTitle: "היסטוריית חלוקות",
+    recentBills: "חשבונות אחרונים",
     noHistoryYet: "אין עדיין חלוקות ששולמו. חלוקות שהסתיימו יופיעו כאן.",
     deleteBtn: "מחק",
     storeLabel: "בית עסק",
@@ -292,6 +296,8 @@ export const translations: Record<string, Record<string, string>> = {
     settingsTitle: "הגדרות חשבון",
     personalInfoSection: "פרטים אישיים",
     displayNameLabel: "שם תצוגה",
+    phoneNumberLabel: "מספר טלפון",
+    phoneInputPlaceholder: "050-1234567",
     phoneLabel: "מספר טלפון (להעברות ביט/פייבוקס)",
     phoneHint: "נדרש לקבלת תשלומים מחברי הקבוצה",
     preferencesSection: "העדפות",

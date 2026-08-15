@@ -29,7 +29,8 @@ import {
   ShoppingCart,
   Plane,
   Wine,
-  Box
+  Box,
+  Pencil
 } from 'lucide-react';
 import { useLanguage } from '../components/LanguageContext';
 import { CameraViewfinder } from '../components/CameraViewfinder';
@@ -149,10 +150,12 @@ export default function HomePage() {
   };
 
   const [nameInput, setNameInput] = useState(profile.displayName || '');
+  const [phoneInput, setPhoneInput] = useState(profile.phoneNumber || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     setNameInput(profile.displayName || '');
+    setPhoneInput(profile.phoneNumber || '');
   }, [profile]);
 
   useEffect(() => {
@@ -235,14 +238,19 @@ export default function HomePage() {
       });
   }, [profile.displayName]);
 
+  const currentMonthName = useMemo(() => {
+    return new Date().toLocaleString(language === 'he' ? 'he-IL' : 'en-US', { month: 'long' });
+  }, [language]);
+
   const financialStats = useMemo(() => {
     let totalSpent = 0;
-    const categories: Record<string, { amount: number; count: number; icon: any; color: string; label: string }> = {
-      Dining: { amount: 0, count: 0, icon: Utensils, color: 'bg-amber-500', label: t('catDining', undefined, 'Dining & Drinks') },
-      Groceries: { amount: 0, count: 0, icon: ShoppingCart, color: 'bg-emerald-500', label: t('catGroceries', undefined, 'Groceries') },
-      Travel: { amount: 0, count: 0, icon: Plane, color: 'bg-sky-500', label: t('catTravel', undefined, 'Travel & Stay') },
-      Entertainment: { amount: 0, count: 0, icon: Wine, color: 'bg-purple-500', label: t('catEntertainment', undefined, 'Entertainment') },
-      General: { amount: 0, count: 0, icon: Box, color: 'bg-slate-500', label: t('catGeneral', undefined, 'General & Other') }
+    const categories: Record<string, { amount: number; count: number; icon: any; color: string; stroke: string; label: string }> = {
+      Transport: { amount: 0, count: 0, icon: Plane, color: 'bg-cyan-500', stroke: '#06B6D4', label: t('catTransport', undefined, 'Transport') },
+      Food: { amount: 0, count: 0, icon: Utensils, color: 'bg-orange-500', stroke: '#F97316', label: t('catFood', undefined, 'Food') },
+      Travel: { amount: 0, count: 0, icon: Globe, color: 'bg-indigo-500', stroke: '#6366F1', label: t('catTravel', undefined, 'Travel') },
+      Shopping: { amount: 0, count: 0, icon: ShoppingCart, color: 'bg-purple-500', stroke: '#8B5CF6', label: t('catShopping', undefined, 'Shopping') },
+      Groceries: { amount: 0, count: 0, icon: Box, color: 'bg-emerald-500', stroke: '#10B981', label: t('catGroceries', undefined, 'Groceries') },
+      Other: { amount: 0, count: 0, icon: Sparkles, color: 'bg-amber-500', stroke: '#F59E0B', label: t('catOther', undefined, 'Other') },
     };
 
     historyList.forEach((item: any) => {
@@ -251,21 +259,24 @@ export default function HomePage() {
       totalSpent += amount;
 
       const titleLower = (item.storeName || '').toLowerCase();
-      if (titleLower.includes('pizza') || titleLower.includes('burger') || titleLower.includes('sushi') || titleLower.includes('cafe') || titleLower.includes('dinner') || titleLower.includes('restaurant') || titleLower.includes('food')) {
-        categories.Dining.amount += amount;
-        categories.Dining.count += 1;
-      } else if (titleLower.includes('market') || titleLower.includes('super') || titleLower.includes('grocer') || titleLower.includes('store') || titleLower.includes('shufersal')) {
-        categories.Groceries.amount += amount;
-        categories.Groceries.count += 1;
-      } else if (titleLower.includes('hotel') || titleLower.includes('flight') || titleLower.includes('taxi') || titleLower.includes('uber') || titleLower.includes('trip') || titleLower.includes('vienna') || titleLower.includes('room')) {
+      if (titleLower.includes('uber') || titleLower.includes('taxi') || titleLower.includes('flight') || titleLower.includes('train') || titleLower.includes('מונית') || titleLower.includes('רכבת') || titleLower.includes('gas') || titleLower.includes('דלק')) {
+        categories.Transport.amount += amount;
+        categories.Transport.count += 1;
+      } else if (titleLower.includes('cafe') || titleLower.includes('coffee') || titleLower.includes('starbucks') || titleLower.includes('קפה') || titleLower.includes('aroma') || titleLower.includes('pizza') || titleLower.includes('burger') || titleLower.includes('sushi') || titleLower.includes('restaurant') || titleLower.includes('food') || titleLower.includes('dinner') || titleLower.includes('bar') || titleLower.includes('מסעדה')) {
+        categories.Food.amount += amount;
+        categories.Food.count += 1;
+      } else if (titleLower.includes('hotel') || titleLower.includes('airbnb') || titleLower.includes('trip') || titleLower.includes('vienna') || titleLower.includes('booking') || titleLower.includes('vacation') || titleLower.includes('מלון') || titleLower.includes('טיול')) {
         categories.Travel.amount += amount;
         categories.Travel.count += 1;
-      } else if (titleLower.includes('bar') || titleLower.includes('beer') || titleLower.includes('pub') || titleLower.includes('movie') || titleLower.includes('cinema') || titleLower.includes('club')) {
-        categories.Entertainment.amount += amount;
-        categories.Entertainment.count += 1;
+      } else if (titleLower.includes('super') || titleLower.includes('market') || titleLower.includes('grocer') || titleLower.includes('shufersal') || titleLower.includes('rami levy') || titleLower.includes('סופר') || titleLower.includes('שופרסל')) {
+        categories.Groceries.amount += amount;
+        categories.Groceries.count += 1;
+      } else if (titleLower.includes('zara') || titleLower.includes('nike') || titleLower.includes('adidas') || titleLower.includes('dkny') || titleLower.includes('shop') || titleLower.includes('store') || titleLower.includes('mall') || titleLower.includes('amazon') || titleLower.includes('clothes') || titleLower.includes('קניון') || titleLower.includes('בגדים')) {
+        categories.Shopping.amount += amount;
+        categories.Shopping.count += 1;
       } else {
-        categories.General.amount += amount;
-        categories.General.count += 1;
+        categories.Other.amount += amount;
+        categories.Other.count += 1;
       }
     });
 
@@ -553,11 +564,19 @@ export default function HomePage() {
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = nameInput.trim() || 'User';
+    const finalPhone = phoneInput.trim();
 
     setProfile((prev) => ({
       ...prev,
       displayName: finalName,
+      phoneNumber: finalPhone,
     }));
+
+    if (finalPhone) {
+      localStorage.setItem('billsplit_phone', finalPhone);
+    } else {
+      localStorage.removeItem('billsplit_phone');
+    }
 
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2000);
@@ -849,233 +868,325 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* TAB 1: HISTORY WITH COMPACT DASHBOARD AT BOTTOM */}
-        {activeTab === 'history' && (
-          <div className="space-y-3 animate-fadeIn">
-            <h2 className="text-base font-extrabold text-slate-900 dark:text-white mb-2">{t('pastHistoryTitle', undefined, 'Past Splits History')}</h2>
+        {/* TAB 1: HISTORY (Picture 2: Compact Financial Dashboard at Top with Pie/Donut Chart & Total Expenses, followed by Recent Bills) */}
+        {activeTab === 'history' && (() => {
+          const totalSpentDual = formatDual ? formatDual(financialStats.totalSpent, currency) : { primary: `${financialStats.totalSpent.toFixed(2)} ${currency}` };
+          
+          // Compact Donut SVG parameters
+          const radius = 44;
+          const circumference = 2 * Math.PI * radius; // ~276.46
+          let accumulatedOffset = 0;
 
-            {historyList.length === 0 ? (
-              <div className="photo-card p-6 bg-white dark:bg-[#121824] text-center text-slate-400 space-y-2">
-                <History className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('noHistoryYet', undefined, 'No settled splits yet.')}</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {historyList.map((item) => {
-                  const shareVal = item.userShare !== undefined ? item.userShare : item.totalAmount;
-                  const dual = formatDual ? formatDual(shareVal || 0, item.currency || 'NIS') : { primary: `${shareVal || 0}` };
-                  const totalDual = formatDual ? formatDual(item.totalAmount || 0, item.currency || 'NIS') : null;
-                  const isShareDifferent = item.userShare !== undefined && Math.abs(item.userShare - item.totalAmount) > 0.01;
+          // Non-zero categories
+          const activeCategories = Object.entries(financialStats.categories).filter(([_, c]) => c.amount > 0);
+          const hasSpending = financialStats.totalSpent > 0 && activeCategories.length > 0;
 
-                  const hash = (item.storeName || '').charCodeAt(0) + (item.storeName || '').charCodeAt((item.storeName || '').length - 1 || 0);
-                  const colors = PASTEL_COLORS[hash % PASTEL_COLORS.length] || PASTEL_COLORS[0];
-
-                  return (
-                    <SwipeableCard key={item.id} onDelete={() => handleDeleteHistory(item.id)}>
-                      <div
-                        onClick={() => {
-                          if (item.isGroupBill && item.groupId) {
-                            router.push(`/group/${item.groupId}`);
-                          } else if (item.id) {
-                            router.push(`/session/${item.id}`);
-                          }
-                        }}
-                        className="photo-card p-3 bg-white dark:bg-[#121824] border border-slate-200/60 dark:border-white/5 shadow-md shadow-slate-950/20 dark:shadow-black/30 flex items-center justify-between hover:shadow-xs transition-all cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Left Icon Indicator */}
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-xs ${colors.bg} ${colors.text}`}>
-                            {item.isGroupBill ? (
-                              <Users className="w-4 h-4" />
-                            ) : (
-                              <FilePlus className="w-4 h-4" />
-                            )}
-                          </div>
-
-                          <div className="space-y-0.5 min-w-0">
-                            <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-tight truncate">
-                              {item.storeName}
-                            </h4>
-                            <p className="text-[10px] text-slate-400 font-medium truncate">
-                              {item.date} {item.isGroupBill ? `• 👥 ${item.groupName || 'Group'}` : ''}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Right side Price */}
-                        <div className="text-right shrink-0 flex flex-col items-end">
-                          <span className="font-black text-slate-900 dark:text-white text-xs block">
-                            {dual.primary}
-                          </span>
-                          {dual.secondary && (
-                            <span className="text-[9px] text-slate-400 font-medium block mt-0.5">
-                              {dual.secondary}
-                            </span>
-                          )}
-                          {isShareDifferent && totalDual && (
-                            <span className="text-[8px] text-slate-400 font-medium block">
-                              (Total: {totalDual.primary})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </SwipeableCard>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Compact Personal Financial Dashboard Card Below History */}
-            <div className="photo-card p-5 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/5 shadow-md shadow-slate-950/15 space-y-4 mt-4">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                <div className="flex items-center gap-1.5">
-                  <PieChart className="w-3.5 h-3.5 text-[#7C3AED] dark:text-[#8B5CF6]" />
-                  <h3 className="font-extrabold text-xs text-slate-850 dark:text-slate-200">
-                    {t('personalFinancialSummary', undefined, 'Financial Summary')}
-                  </h3>
+          return (
+            <div className="space-y-5 animate-fadeIn pb-4">
+              {/* Financial Dashboard Card (Top) - Compact & Elegant */}
+              <div className="photo-card p-4 sm:p-4.5 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/5 shadow-md shadow-slate-950/10 rounded-2xl space-y-3">
+                {/* Header: Total expenses & Amount */}
+                <div className="text-center sm:text-left">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+                    {t('totalExpenses', undefined, 'Total expenses')}
+                  </span>
+                  <div className="flex items-baseline justify-center sm:justify-start gap-2 mt-0.5">
+                    <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                      {totalSpentDual.primary}
+                    </span>
+                    {totalSpentDual.secondary && (
+                      <span className="text-[11px] font-bold text-slate-400">
+                        {totalSpentDual.secondary}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-[#7C3AED] dark:text-[#8B5CF6] font-extrabold text-[9px] uppercase tracking-wider">
-                  {t('liveBreakdown', undefined, 'Live Breakdown')}
-                </span>
+
+                {/* Donut Chart with Segmented Arcs & Center Label */}
+                <div className="flex flex-col items-center justify-center pt-1">
+                  <div className="relative w-36 h-36 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 110 110">
+                      {/* Background track circle */}
+                      <circle
+                        cx="55"
+                        cy="55"
+                        r={radius}
+                        fill="transparent"
+                        stroke="currentColor"
+                        className="text-slate-100 dark:text-slate-800/60"
+                        strokeWidth="10"
+                      />
+
+                      {/* Dynamic Category Segments */}
+                      {hasSpending ? (
+                        activeCategories.map(([key, cat]) => {
+                          const pct = (cat.amount / financialStats.totalSpent);
+                          const strokeLen = Math.max(1, pct * circumference - (activeCategories.length > 1 ? 6 : 0));
+                          const strokeDasharray = `${strokeLen} ${circumference - strokeLen}`;
+                          const strokeDashoffset = -accumulatedOffset;
+                          accumulatedOffset += pct * circumference;
+
+                          return (
+                            <circle
+                              key={key}
+                              cx="55"
+                              cy="55"
+                              r={radius}
+                              fill="transparent"
+                              stroke={cat.stroke}
+                              strokeWidth="10"
+                              strokeDasharray={strokeDasharray}
+                              strokeDashoffset={strokeDashoffset}
+                              strokeLinecap="round"
+                              className="transition-all duration-500 ease-out"
+                            />
+                          );
+                        })
+                      ) : (
+                        <circle
+                          cx="55"
+                          cy="55"
+                          r={radius}
+                          fill="transparent"
+                          stroke="#7C3AED"
+                          strokeWidth="10"
+                          strokeDasharray="30 250"
+                          strokeLinecap="round"
+                          className="opacity-40"
+                        />
+                      )}
+                    </svg>
+
+                    {/* Center Text inside Donut */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                      <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-400">
+                        {t('totalExpenses', undefined, 'Total expenses')}
+                      </span>
+                      <span className="text-xs font-black text-slate-900 dark:text-white capitalize mt-0.5">
+                        {currentMonthName}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category Breakdown Chips / Legend */}
+                <div className="flex flex-wrap items-center justify-center gap-x-3.5 gap-y-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800/80">
+                  {Object.entries(financialStats.categories).map(([key, cat]) => {
+                    const pct = financialStats.totalSpent > 0 ? Math.round((cat.amount / financialStats.totalSpent) * 100) : 0;
+                    if (financialStats.totalSpent > 0 && cat.amount <= 0) return null;
+                    return (
+                      <div key={key} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${cat.color}`} />
+                        <span>{cat.label}</span>
+                        <span className="text-slate-400 dark:text-slate-500 font-mono text-[10px]">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Progress bar displaying category weights */}
-              <div className="space-y-2.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-400 font-medium">{t('totalSpentLabel', undefined, 'Total Spent')}</span>
-                  <span className="font-black text-slate-800 dark:text-slate-200">
-                    {formatPrice ? formatPrice(financialStats.totalSpent, currency) : `${financialStats.totalSpent.toFixed(2)} ${currency}`}
+              {/* Recent Bills Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    {t('recentBills', undefined, 'Recent bills')}
+                  </h3>
+                  <span className="text-[11px] font-extrabold text-slate-400">
+                    {t('splitsCountLabel', { n: historyList.length }, `${historyList.length} Splits`)}
                   </span>
                 </div>
 
-                <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
-                  {Object.entries(financialStats.categories).map(([catKey, catData]) => {
-                    const pct = financialStats.totalSpent > 0 ? (catData.amount / financialStats.totalSpent) * 100 : 0;
-                    if (pct <= 0) return null;
-                    return (
-                      <div
-                        key={catKey}
-                        style={{ width: `${pct}%` }}
-                        className={`h-full ${catData.color}`}
-                        title={`${catData.label}: ${pct.toFixed(0)}%`}
-                      />
-                    );
-                  })}
-                </div>
+                {historyList.length === 0 ? (
+                  <div className="photo-card p-6 bg-white dark:bg-[#121824] text-center text-slate-400 space-y-2 rounded-2xl border border-slate-200/80 dark:border-white/5">
+                    <History className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {t('noHistoryYet', undefined, 'No settled splits yet.')}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {historyList.map((item) => {
+                      const shareVal = item.userShare !== undefined ? item.userShare : item.totalAmount;
+                      const dual = formatDual ? formatDual(shareVal || 0, item.currency || 'NIS') : { primary: `${shareVal || 0}` };
+                      const totalDual = formatDual ? formatDual(item.totalAmount || 0, item.currency || 'NIS') : null;
+                      const isShareDifferent = item.userShare !== undefined && Math.abs(item.userShare - item.totalAmount) > 0.01;
 
-                {/* Legend list */}
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-1.5">
-                  {Object.entries(financialStats.categories).map(([catKey, catData]) => {
-                    const pct = financialStats.totalSpent > 0 ? (catData.amount / financialStats.totalSpent) * 100 : 0;
-                    if (catData.amount <= 0 && financialStats.totalSpent > 0) return null;
-                    return (
-                      <div key={catKey} className="flex items-center justify-between text-[10px] font-bold">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${catData.color}`} />
-                          <span className="text-slate-500 dark:text-slate-400 truncate">{catData.label}</span>
-                        </div>
-                        <span className="font-mono text-slate-800 dark:text-white shrink-0 ml-1">
-                          {formatPrice ? formatPrice(catData.amount, currency) : `${catData.amount.toFixed(2)} ${currency}`}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      // Helper to find category icon/colors
+                      const titleLower = (item.storeName || '').toLowerCase();
+                      let ItemIcon = Utensils;
+                      let iconBg = 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border-orange-200/60 dark:border-orange-800/40';
 
-              {/* Footer Metric Pills */}
-              <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 font-medium">
-                <span>{t('splitsCountLabel', { n: financialStats.splitsCount }, `${financialStats.splitsCount} Splits`)}</span>
-                <span>•</span>
-                <span>{t('activeGroupsCountLabel', { n: financialStats.groupsCount }, `${financialStats.groupsCount} Active Groups`)}</span>
+                      if (titleLower.includes('uber') || titleLower.includes('taxi') || titleLower.includes('flight') || titleLower.includes('train')) {
+                        ItemIcon = Plane;
+                        iconBg = 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 border-cyan-200/60 dark:border-cyan-800/40';
+                      } else if (titleLower.includes('zara') || titleLower.includes('nike') || titleLower.includes('dkny') || titleLower.includes('shop')) {
+                        ItemIcon = ShoppingCart;
+                        iconBg = 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border-purple-200/60 dark:border-purple-800/40';
+                      } else if (titleLower.includes('hotel') || titleLower.includes('airbnb') || titleLower.includes('trip')) {
+                        ItemIcon = Globe;
+                        iconBg = 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200/60 dark:border-indigo-800/40';
+                      } else if (titleLower.includes('super') || titleLower.includes('market') || titleLower.includes('grocer')) {
+                        ItemIcon = Box;
+                        iconBg = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200/60 dark:border-emerald-800/40';
+                      }
+
+                      return (
+                        <SwipeableCard key={item.id} onDelete={() => handleDeleteHistory(item.id)}>
+                          <div
+                            onClick={() => {
+                              if (item.isGroupBill && item.groupId) {
+                                router.push(`/group/${item.groupId}`);
+                              } else if (item.id) {
+                                router.push(`/session/${item.id}`);
+                              }
+                            }}
+                            className="photo-card p-3.5 bg-white dark:bg-[#121824] border border-slate-200/70 dark:border-white/5 shadow-xs flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-all cursor-pointer rounded-2xl"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {/* Brand / Category Avatar Icon */}
+                              <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 shadow-xs ${iconBg}`}>
+                                <ItemIcon className="w-5 h-5" />
+                              </div>
+
+                              <div className="space-y-0.5 min-w-0">
+                                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
+                                  {item.storeName}
+                                </h4>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                                  {item.date} {item.isGroupBill ? `• 👥 ${item.groupName || 'Group'}` : ''}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Right side Amount with Minus Sign */}
+                            <div className="text-right shrink-0 flex flex-col items-end">
+                              <span className="font-black text-slate-900 dark:text-white text-sm">
+                                -{dual.primary}
+                              </span>
+                              {dual.secondary && (
+                                <span className="text-[10px] text-slate-400 font-medium block">
+                                  -{dual.secondary}
+                                </span>
+                              )}
+                              {isShareDifferent && totalDual && (
+                                <span className="text-[9px] text-slate-400 font-medium block">
+                                  (Total: {totalDual.primary})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </SwipeableCard>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
-        {/* TAB 3: SETTINGS */}
+        {/* TAB 3: SETTINGS / PROFILE */}
         {activeTab === 'settings' && (
-          <div className="space-y-4 animate-fadeIn">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{t('settingsTitle', undefined, 'Account Settings')}</h2>
+          <div className="space-y-5 animate-fadeIn pb-6">
+            {/* Header: "Profile" */}
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white text-center">
+              {t('profileTitle', undefined, 'Profile')}
+            </h2>
 
-            <form onSubmit={handleSaveSettings} className="space-y-4">
-              <div className="photo-card p-4 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/5 shadow-md shadow-slate-950/10 space-y-3">
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-1.5">
-                  <User className="w-4 h-4 text-slate-700 dark:text-slate-300" />
-                  <span>{t('personalInfoSection', undefined, 'Personal Info')}</span>
-                </h3>
-                       {/* Profile Photo Edit Section (Compact Horizontal) */}
-                <div className="flex items-center gap-4 py-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
-                  <div className="relative group cursor-pointer shrink-0" onClick={() => avatarFileInputRef.current?.click()}>
-                    <div className="w-14 h-14 rounded-full p-0.5 bg-slate-200 dark:bg-slate-800 border-2 border-slate-350 dark:border-[#222C3D] flex items-center justify-center overflow-hidden shadow-sm transition-all group-hover:scale-105 active:scale-95">
-                      {profile.avatarUrl ? (
-                        <img
-                          src={profile.avatarUrl}
-                          alt="Profile Avatar"
-                          className="w-full h-full rounded-full object-cover"
-                        />
-                      ) : (
-                        <div
-                          className="w-full h-full rounded-full flex items-center justify-center font-black text-sm text-white"
-                          style={{ backgroundColor: profile.avatarColor || '#7C3AED' }}
-                        >
-                          {userInitials}
-                        </div>
-                      )}
+            {/* Profile Avatar Centered with Edit Badge - Matching Picture 4 */}
+            <div className="flex flex-col items-center justify-center space-y-2 py-2">
+              <div className="relative group cursor-pointer" onClick={() => avatarFileInputRef.current?.click()}>
+                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-white dark:bg-[#1A2333] border-4 border-slate-100 dark:border-[#222C3D] flex items-center justify-center overflow-hidden shadow-lg transition-transform duration-200 group-hover:scale-105 active:scale-95">
+                  {profile.avatarUrl ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt="Profile Avatar"
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full rounded-full flex items-center justify-center font-black text-2xl text-white shadow-inner"
+                      style={{ backgroundColor: profile.avatarColor || '#7C3AED' }}
+                    >
+                      {userInitials}
                     </div>
-                    {/* Hover Overlay Icon */}
-                    <div className="absolute inset-0 bg-black/40 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Camera className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider leading-none">
-                      {t('profilePhotoLabel', undefined, 'Profile Picture')}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => avatarFileInputRef.current?.click()}
-                        className="py-1 px-2.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-[#222C3D] text-[10px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-750 transition-colors"
-                      >
-                        {t('changePhotoBtn', undefined, 'Change')}
-                      </button>
-                      {profile.avatarUrl && (
-                        <button
-                          type="button"
-                          onClick={handleResetPhoto}
-                          className="py-1 px-2.5 rounded-full bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/40 text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900 transition-colors"
-                        >
-                          {t('removePhotoBtn', undefined, 'Remove')}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <input
-                    type="file"
-                    ref={avatarFileInputRef}
-                    accept="image/*"
-                    onChange={handleAvatarUpload}
-                    className="hidden"
-                  />
+                  )}
                 </div>
 
-                <div className="pt-1">
+                {/* Floating Rounded-Square Pencil Edit Badge (Bottom Right) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    avatarFileInputRef.current?.click();
+                  }}
+                  className="absolute bottom-0 right-0 p-2.5 rounded-2xl bg-white dark:bg-[#1E293B] text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-md hover:scale-110 active:scale-90 transition-all"
+                  title={t('changePhotoBtn', undefined, 'Change Profile Photo')}
+                >
+                  <Pencil className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
+
+              {profile.avatarUrl && (
+                <button
+                  type="button"
+                  onClick={handleResetPhoto}
+                  className="text-[11px] font-bold text-rose-500 hover:text-rose-600 dark:text-rose-400 hover:underline pt-0.5"
+                >
+                  {t('removePhotoBtn', undefined, 'Remove Photo')}
+                </button>
+              )}
+
+              <input
+                type="file"
+                ref={avatarFileInputRef}
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="space-y-4">
+              {/* Personal Info Card */}
+              <div className="photo-card p-5 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/5 shadow-md shadow-slate-950/10 space-y-4 rounded-2xl">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                    <User className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+                    <span>{t('personalInfoSection', undefined, 'Personal info')}</span>
+                  </h3>
+                  <button
+                    type="submit"
+                    className="text-xs font-bold text-[#7C3AED] dark:text-[#8B5CF6] hover:underline"
+                  >
+                    {t('editLabel', undefined, 'Edit')}
+                  </button>
+                </div>
+
+                <div className="space-y-3">
                   <div>
-                    <div className="flex flex-col justify-end min-h-[40px] mb-1">
-                      <label className="text-[10px] font-bold text-slate-450 dark:text-slate-400 block leading-tight">
-                        {t('displayNameLabel', undefined, 'Display Name')}
-                      </label>
-                    </div>
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
+                      {t('displayNameLabel', undefined, 'Display Name')}
+                    </label>
                     <input
                       type="text"
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
                       placeholder={t('nameInputPlaceholder', undefined, 'e.g. Naor')}
-                      className="w-full py-1.5 px-3.5 rounded-xl photo-input text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
+                      className="w-full py-2.5 px-3.5 rounded-xl photo-input text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
                       required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
+                      {t('phoneNumberLabel', undefined, 'Phone Number')}
+                    </label>
+                    <input
+                      type="tel"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      placeholder={t('phoneInputPlaceholder', undefined, '050-1234567')}
+                      className="w-full py-2.5 px-3.5 rounded-xl photo-input text-xs font-semibold font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
                     />
                   </div>
                 </div>

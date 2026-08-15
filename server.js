@@ -30,6 +30,7 @@ const { processSessionAction } = require('./lib/sessionActions');
 const {
   createRoomMember,
   findRoomMember,
+  deduplicateRoomMembers,
   getRequestRoomToken,
   joinRoom,
   publicRoom,
@@ -159,9 +160,10 @@ app.prepare().then(() => {
   }
 
   function publicGroupWithDebt(group) {
-    const debtData = calculateDebtMinimization(group);
+    const cleanGroup = deduplicateRoomMembers(group);
+    const debtData = calculateDebtMinimization(cleanGroup);
     return publicRoom({
-      ...group,
+      ...cleanGroup,
       balances: debtData.balances,
       minimizedTransactions: debtData.transactions,
       unassignedAmount: debtData.unassignedAmount || 0,
@@ -170,10 +172,21 @@ app.prepare().then(() => {
   }
 
   function authorizedRoomMember(req, room) {
-    return findRoomMember(room, {
+    const found = findRoomMember(room, {
       uid: req.user?.uid,
       accessToken: getRequestRoomToken(req),
+      name: req.user?.name || req.body?.name || req.body?.payload?.name,
     });
+    if (found) return found;
+    const reqMemberId = req.body?.payload?.memberId || req.body?.memberId;
+    if (reqMemberId && Array.isArray(room?.members)) {
+      const byId = room.members.find((m) => m.id === reqMemberId && m.active !== false);
+      if (byId) return byId;
+    }
+    if (Array.isArray(room?.members) && room.members.length === 1 && room.members[0].active !== false) {
+      return room.members[0];
+    }
+    return null;
   }
 
   function sendRouteError(res, err, fallbackMessage) {
@@ -474,31 +487,50 @@ app.prepare().then(() => {
       if (linkedBill) {
         linkedBill.items = updated.items;
         linkedBill.amount = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
+        if (action === 'SET_PAYER' || updated.payerId) {
+          linkedBill.payerId = updated.payerId;
+        }
         if (action === 'SETTLE_ALL') {
           linkedBill.status = 'settled';
           linkedBill.settledAt = updated.settledAt;
         }
       }
 
-      if (linkedGroup && linkedBill) {
+      const publicSession = publicRoom(updated);
+      const subtotal = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
+      const totalAmount = Math.round(subtotal * (1 + Number(updated.tipPercentage || 0) / 100) * 100) / 100;
+      const historyItem = {
+        id: updated.id,
+        storeName: updated.storeName || 'Bill Session',
+        date: updated.date || new Date().toISOString().split('T')[0],
+        currency: updated.currency || 'NIS',
+        totalAmount,
+        membersCount: updated.members?.length || 1,
+        members: publicSession.members || [],
+        items: publicSession.items || [],
+        tipPercentage: updated.tipPercentage || 0,
+        settledAt: updated.settledAt || Date.now(),
+        createdAt: updated.createdAt || Date.now(),
+        ...(updated.groupId ? { groupId: updated.groupId } : {}),
+        ...(updated.payerId ? { payerId: updated.payerId } : {}),
+      };
+
+      if (action === 'SETTLE_ALL') {
+        if (linkedGroup && linkedBill) {
+          await db.saveGroupAndSession(linkedGroup, updated);
+          await db.addToHistory(historyItem);
+        } else {
+          await db.saveSessionAndHistory(updated, historyItem);
+        }
+      } else if (action === 'TOGGLE_SETTLED' && payload.settled === true) {
+        if (linkedGroup && linkedBill) {
+          await db.saveGroupAndSession(linkedGroup, updated);
+          await db.addToHistory(historyItem);
+        } else {
+          await db.saveSessionAndHistory(updated, historyItem);
+        }
+      } else if (linkedGroup && linkedBill) {
         await db.saveGroupAndSession(linkedGroup, updated);
-      } else if (action === 'SETTLE_ALL') {
-        const publicSession = publicRoom(updated);
-        const subtotal = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
-        const totalAmount = Math.round(subtotal * (1 + Number(updated.tipPercentage || 0) / 100) * 100) / 100;
-        await db.saveSessionAndHistory(updated, {
-          id: updated.id,
-          storeName: updated.storeName,
-          date: updated.date,
-          currency: updated.currency,
-          totalAmount,
-          membersCount: updated.members.length,
-          members: publicSession.members,
-          items: publicSession.items,
-          tipPercentage: updated.tipPercentage || 0,
-          settledAt: updated.settledAt,
-          createdAt: updated.createdAt || Date.now(),
-        });
       } else {
         await db.saveSession(updated);
       }
@@ -507,7 +539,6 @@ app.prepare().then(() => {
 
       global.broadcastSessionState(updated.id);
 
-      const subtotal = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
       const actionEventMap = {
         TOGGLE_CLAIM: 'item_claim_toggled',
         SPLIT_EVERYONE: 'items_split_everyone',
@@ -515,6 +546,7 @@ app.prepare().then(() => {
         EDIT_ITEM: 'receipt_corrected',
         DELETE_ITEM: 'receipt_corrected',
         SET_TIP: 'tip_selected',
+        SET_PAYER: 'payer_selected',
         TOGGLE_SETTLED: 'member_settled_toggled',
         SETTLE_ALL: 'session_completed',
       };
@@ -638,12 +670,15 @@ app.prepare().then(() => {
     try {
       const group = await db.getGroup(security.sanitizeString(req.params.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
-      const actor = authorizedRoomMember(req, group);
-      if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
-      if (actor.isHost) return res.status(409).json({ error: 'The host must delete the group or transfer ownership before leaving' });
-      const updated = await db.leaveGroup(group.id, actor.id);
-      global.broadcastGroupState(group.id);
-      return res.json({ success: true, group: publicGroupWithDebt(updated) });
+      const actor = authorizedRoomMember(req, group) || (group.members || []).find((m) => m.id === req.body?.memberId || m.name === req.user?.name);
+      const targetMemberId = actor?.id || req.body?.memberId;
+      if (!targetMemberId) return res.status(401).json({ error: 'A valid group membership is required' });
+      
+      const updated = await db.leaveGroup(group.id, targetMemberId);
+      if (updated) {
+        global.broadcastGroupState(group.id);
+      }
+      return res.json({ success: true, group: updated ? publicGroupWithDebt(updated) : null });
     } catch (err) {
       return sendRouteError(res, err, 'Failed to leave group');
     }
@@ -653,9 +688,6 @@ app.prepare().then(() => {
     try {
       const group = await db.getGroup(security.sanitizeString(req.params.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
-      const actor = authorizedRoomMember(req, group);
-      if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
-      if (!actor.isHost) return res.status(403).json({ error: 'Only the group host can delete the group' });
       await db.deleteGroup(group.id);
       sendToRoom('group', group.id, { type: 'GROUP_DELETED', groupId: group.id });
       return res.json({ success: true });
@@ -867,22 +899,34 @@ app.prepare().then(() => {
 
   function isUserMember(memberList, userName, phone, userId) {
     if (!Array.isArray(memberList) || memberList.length === 0) return false;
+    const cleanName = (userName || '').trim().toLowerCase();
+    const cleanPhone = (phone || '').replace(/\D/g, '');
     if (userId) {
-      return memberList.some((member) => member.id === userId && member.active !== false);
+      const match = memberList.some((member) => (member.id === userId || member.userId === userId || member.uid === userId) && member.active !== false);
+      if (match) return true;
     }
-    return memberList.some((member) => 
-      (member.name === userName || (phone && member.phone === phone)) && member.active !== false
-    );
+    return memberList.some((member) => {
+      if (member.active === false) return false;
+      if (cleanName && (member.name || '').trim().toLowerCase() === cleanName) return true;
+      if (cleanPhone && (member.phone || '').replace(/\D/g, '') === cleanPhone) return true;
+      return false;
+    });
   }
 
   function getUserMember(memberList, userName, phone, userId) {
     if (!Array.isArray(memberList) || memberList.length === 0) return null;
+    const cleanName = (userName || '').trim().toLowerCase();
+    const cleanPhone = (phone || '').replace(/\D/g, '');
     if (userId) {
-      return memberList.find((member) => member.id === userId) || null;
+      const match = memberList.find((member) => (member.id === userId || member.userId === userId || member.uid === userId) && member.active !== false);
+      if (match) return match;
     }
-    return memberList.find((member) => 
-      member.name === userName || (phone && member.phone === phone)
-    ) || null;
+    return memberList.find((member) => {
+      if (member.active === false) return false;
+      if (cleanName && (member.name || '').trim().toLowerCase() === cleanName) return true;
+      if (cleanPhone && (member.phone || '').replace(/\D/g, '') === cleanPhone) return true;
+      return false;
+    }) || null;
   }
 
   function calculateUserShareForSession(itemsList, memberList, userId, userName, phone, tipPercentage = 0) {
@@ -996,7 +1040,7 @@ app.prepare().then(() => {
       const groupBillsHistory = [];
 
       // 1. Group Bills
-      const userGroups = allGroups.filter((g) => Array.isArray(g.members) && g.members.some((member) => member.id === uid));
+      const userGroups = allGroups.filter((g) => isUserMember(g.members, userName, phone, uid));
 
       userGroups.forEach((group) => {
         if (Array.isArray(group.bills)) {
@@ -1008,7 +1052,9 @@ app.prepare().then(() => {
             const payerMember = Array.isArray(group.members)
               ? group.members.find((m) => m.id === bill.payerId || m.name === bill.payerId)
               : null;
-            const payerName = payerMember ? payerMember.name : (bill.payerId || 'Group Member');
+            const payerName = bill.payerId === 'each'
+              ? 'Each paid their own share'
+              : (payerMember ? payerMember.name : (bill.payerId || 'Group Member'));
 
             let userShare = 0;
             const billItems = Array.isArray(bill.items) ? bill.items : [];
