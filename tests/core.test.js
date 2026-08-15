@@ -9,7 +9,7 @@ const { processSessionAction } = require('../lib/sessionActions');
 const { createRoomMember, findRoomMember, joinRoom, publicRoom } = require('../lib/roomAuth');
 const { broadcastToRoom, subscribeClient } = require('../lib/realtimeRooms');
 const { calculateDebtMinimization, splitCents } = require('../lib/debtMinimizer');
-const { normalizeReceipt } = require('../lib/gemini');
+const { normalizeReceipt, selectBetterReceipt } = require('../lib/gemini');
 const { reconcileReceipt } = require('../lib/receiptMath');
 const { processGroupBillAction } = require('../lib/groupActions');
 const security = require('../lib/security');
@@ -176,6 +176,22 @@ test('OCR drops unreadable prices instead of inventing a fallback amount', () =>
   assert.equal(receipt.items[0].price, 18.5);
 });
 
+test('OCR uses the full line total when a receipt row contains multiple units', () => {
+  const receipt = normalizeReceipt({
+    storeName: 'Cafe',
+    receiptTotal: 36,
+    items: [{ name: 'Coffee', quantity: 3, unitPrice: 12, lineTotal: 36 }],
+  }, 'Cafe');
+  assert.equal(receipt.items[0].name, 'Coffee (3x)');
+  assert.equal(receipt.items[0].price, 36);
+});
+
+test('OCR verification prefers an arithmetically reconciled second read', () => {
+  const first = { receiptTotal: 100, items: [{ name: 'Meal', price: 60 }] };
+  const second = { receiptTotal: 100, items: [{ name: 'Meal', price: 60 }, { name: 'Drink', price: 40 }] };
+  assert.equal(selectBetterReceipt(first, second), second);
+});
+
 test('receipt reconciliation flags a meaningful mismatch for review', () => {
   const result = reconcileReceipt({
     receiptTotal: 100,
@@ -199,6 +215,17 @@ test('receipt reconciliation accepts matching totals with adjustments', () => {
   });
   assert.equal(result.status, 'matched');
   assert.equal(result.needsReview, false);
+});
+
+test('receipt reconciliation does not add VAT twice when it is already included', () => {
+  const result = reconcileReceipt({
+    receiptTotal: 100,
+    tax: 15.25,
+    items: [{ price: 60 }, { price: 40 }],
+  });
+  assert.equal(result.status, 'matched');
+  assert.equal(result.calculatedTotal, 100);
+  assert.equal(result.calculationMode, 'items');
 });
 
 test('group members can claim only for themselves without rewriting a bill', () => {

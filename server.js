@@ -267,12 +267,19 @@ app.prepare().then(() => {
     return receipt;
   }
 
+  function getOcrSource(body) {
+    if (body?.imageBase64) return 'server-image';
+    if (body?.rawText) return 'client-raw-text';
+    if (body?.parsedBill) return 'client-parsed';
+    return 'unknown';
+  }
+
   // REST API Routes
 
   // Parse a receipt and create a private real-time session.
   server.post('/api/receipt/parse', authenticateUser, ocrRateLimit, async (req, res) => {
     const startedAt = Date.now();
-    const ocrSource = req.body?.imageBase64 ? 'server-image' : 'client-parsed';
+    const ocrSource = getOcrSource(req.body);
     void trackAnalyticsEvent('ocr_scan_started', {
       userId: req.user?.uid,
       metadata: { route: '/api/receipt/parse', ocrSource },
@@ -317,7 +324,7 @@ app.prepare().then(() => {
 
   server.post('/api/receipt/scan', authenticateUser, ocrRateLimit, async (req, res) => {
     const startedAt = Date.now();
-    const ocrSource = req.body?.imageBase64 ? 'server-image' : 'client-parsed';
+    const ocrSource = getOcrSource(req.body);
     void trackAnalyticsEvent('ocr_scan_started', {
       userId: req.user?.uid,
       metadata: { route: '/api/receipt/scan', ocrSource },

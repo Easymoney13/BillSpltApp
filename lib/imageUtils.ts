@@ -1,23 +1,24 @@
 /**
- * Compress, scale, contrast-boost, and sharpen receipt image for ultra-high precision OCR scanning
+ * Prepare a receipt photo for vision OCR without throwing away the fine print.
+ * Phone photos are usually far larger than the API needs, while long receipts
+ * need substantially more detail than a 1200px thumbnail can retain.
  */
 export function compressReceiptImage(fileOrBase64: File | string, isHighContrastForTesseract = false): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
 
     img.onload = () => {
-      const maxDimension = 1200; // Optimal resolution for sub-second Gemini 2.5 Vision OCR
+      const maxDimension = 4200;
+      const maxPixels = 7_000_000;
       let width = img.width;
       let height = img.height;
 
-      if (width > maxDimension || height > maxDimension) {
-        if (width > height) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        } else {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
-        }
+      const dimensionScale = Math.min(1, maxDimension / Math.max(width, height));
+      const pixelScale = Math.min(1, Math.sqrt(maxPixels / Math.max(1, width * height)));
+      const scale = Math.min(dimensionScale, pixelScale);
+      if (scale < 1) {
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
       }
 
       const canvas = document.createElement('canvas');
@@ -34,17 +35,18 @@ export function compressReceiptImage(fileOrBase64: File | string, isHighContrast
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, width, height);
 
-      // Contrast, brightness, and sharpness enhancement for thermal receipt text
+      // Tesseract benefits from aggressive monochrome contrast. Vision models
+      // perform better with a lightly enhanced image that still preserves ink,
+      // paper, logo, and layout cues.
       if (isHighContrastForTesseract) {
-        ctx.filter = 'grayscale(100%) contrast(2.2) brightness(1.05)';
+        ctx.filter = 'grayscale(100%) contrast(1.85) brightness(1.04)';
       } else {
-        ctx.filter = 'contrast(1.35) brightness(1.03) saturate(1.1)';
+        ctx.filter = 'contrast(1.12) brightness(1.02)';
       }
 
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Additional sharpening for fine thermal print text
-      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.94);
       resolve(compressedDataUrl);
     };
  
