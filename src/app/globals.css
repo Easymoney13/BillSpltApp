@@ -33,7 +33,7 @@ body {
   font-family: var(--font-heebo);
 }
 
-/* Card utilities */
+/* Modern Fintech Card utilities (billsplit.app inspired) */
 .photo-card {
   background-color: #FFFFFF;
   border-radius: 20px;
@@ -43,25 +43,26 @@ body {
 }
 
 .dark .photo-card {
-  background-color: #1A1A1A !important;
-  border-color: #262626 !important;
+  background-color: #0F172A !important;
+  border-color: #1E293B !important;
   box-shadow: 0 10px 40px -15px rgba(0, 0, 0, 0.5);
   color: #FFFFFF !important;
 }
 
-/* Vibrant Electric Indigo Hero Card (Matching User Picture) */
+/* Modern Fintech Hero Card */
 .photo-card-lime, .photo-card-indigo {
-  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
   border-radius: 20px;
   color: #FFFFFF;
-  box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .dark .photo-card-lime, .dark .photo-card-indigo {
-  background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
-  border: 1px solid #4F46E5;
+  background: linear-gradient(135deg, #0B1120 0%, #131E32 100%);
+  border: 1px solid #1E293B;
   color: #FFFFFF;
-  box-shadow: 0 8px 24px -4px rgba(79, 70, 229, 0.15);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4);
 }
 
 .photo-btn-dark {
@@ -78,26 +79,26 @@ body {
 }
 
 .dark .photo-btn-dark {
-  background-color: #7C3AED;
+  background-color: #10B981;
   color: #FFFFFF;
   font-weight: 800;
 }
 
 .dark .photo-btn-dark:hover {
-  background-color: #8B5CF6;
+  background-color: #059669;
 }
 
 .photo-btn-lime, .photo-btn-indigo {
-  background-color: #7C3AED;
+  background-color: #10B981;
   color: #FFFFFF;
   border-radius: 9999px;
   font-weight: 800;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
 }
 
 .photo-btn-lime:hover, .photo-btn-indigo:hover {
-  background-color: #6D28D9;
+  background-color: #059669;
   transform: translateY(-1px);
 }
 
@@ -110,8 +111,8 @@ body {
 }
 
 .photo-input:focus {
-  border-color: #7C3AED;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+  border-color: #10B981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
   outline: none;
 }
 
@@ -122,8 +123,8 @@ body {
 }
 
 .dark .photo-input:focus {
-  border-color: #7C3AED;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+  border-color: #10B981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
 }
 
 /* Sliding nav pill indicator transition */
@@ -175,6 +176,50 @@ body {
   }
 }
 
+@keyframes floatBill {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(0.5deg);
+  }
+}
+
+@keyframes searchSweep {
+  0% {
+    top: 0%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 92%;
+    opacity: 1;
+  }
+  100% {
+    top: 0%;
+    opacity: 0.8;
+  }
+}
+
+@keyframes fluidShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes ambientGlow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.04);
+  }
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -182,3 +227,20 @@ body {
 .animate-scanBeam {
   animation: scanBeam 2.2s ease-in-out infinite alternate;
 }
+
+.animate-floatBill {
+  animation: floatBill 3.5s ease-in-out infinite;
+}
+
+.animate-searchSweep {
+  animation: searchSweep 2.2s ease-in-out infinite;
+}
+
+.animate-fluidShimmer {
+  animation: fluidShimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-ambientGlow {
+  animation: ambientGlow 4s ease-in-out infinite;
+}
+

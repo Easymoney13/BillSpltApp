@@ -330,3 +330,67 @@ test('session SET_PAYER allows any member or each paid share', () => {
   assert.equal(updatedEach.payerId, 'each');
 });
 
+test('isTotalOrTaxLine correctly identifies total/tax lines in Hebrew and English', () => {
+  const { isTotalOrTaxLine } = require('../lib/receiptMath');
+  assert.equal(isTotalOrTaxLine('סה""כ חשבון :'), true);
+  assert.equal(isTotalOrTaxLine('סה"כ לתשלום'), true);
+  assert.equal(isTotalOrTaxLine('סך הכל:'), true);
+  assert.equal(isTotalOrTaxLine('סכום לתשלום'), true);
+  assert.equal(isTotalOrTaxLine('חשבון לתשלום'), true);
+  assert.equal(isTotalOrTaxLine('TOTAL'), true);
+  assert.equal(isTotalOrTaxLine('GRAND TOTAL'), true);
+  assert.equal(isTotalOrTaxLine('SUBTOTAL'), true);
+  assert.equal(isTotalOrTaxLine('BALANCE DUE'), true);
+  assert.equal(isTotalOrTaxLine('AMOUNT DUE: 45.00'), true);
+  assert.equal(isTotalOrTaxLine('מע"מ'), true);
+  
+  // Real menu items should NOT be identified as totals
+  assert.equal(isTotalOrTaxLine('פיצה מרגריטה'), false);
+  assert.equal(isTotalOrTaxLine('קולה זירו'), false);
+  assert.equal(isTotalOrTaxLine('Pasta Bolognese'), false);
+  assert.equal(isTotalOrTaxLine('Steak & Fries'), false);
+});
+
+test('formatCurrency and formatDualPrice format $ and ₪ properly without double parens', () => {
+  const { formatCurrency, formatDualPrice } = require('../lib/i18n');
+  assert.equal(formatCurrency(303, 'NIS'), '₪303.00');
+  assert.equal(formatCurrency(102.47, 'USD'), '$102.47');
+  
+  const dual = formatDualPrice(303, 'NIS', 'USD');
+  assert.equal(dual.primary, '₪303.00');
+  assert.ok(dual.secondary.startsWith('$'));
+  assert.equal(dual.secondary.includes('(('), false);
+});
+
+test('IP rate limiter allows 5 requests per 15 minutes and blocks the 6th', () => {
+  const { createIpRateLimiter } = require('../lib/security');
+  const limiter = createIpRateLimiter({ windowMs: 15 * 60 * 1000, max: 5 });
+  const ip = '192.168.1.50';
+  const startTime = 1000000;
+
+  // Requests 1 to 5 should succeed
+  for (let i = 1; i <= 5; i++) {
+    const res = limiter.check(ip, startTime + i * 1000);
+    assert.equal(res.allowed, true, `Request ${i} should be allowed`);
+    assert.equal(res.remaining, 5 - i);
+  }
+
+  // 6th request within window should be rejected with status 429
+  const blocked = limiter.check(ip, startTime + 6000);
+  assert.equal(blocked.allowed, false, 'Request 6 should be blocked');
+  assert.equal(blocked.remaining, 0);
+  assert.ok(blocked.retryAfterSeconds > 0);
+
+  // Different IP should still have full quota
+  const otherIpRes = limiter.check('10.0.0.1', startTime + 7000);
+  assert.equal(otherIpRes.allowed, true, 'Other IP should be allowed');
+  assert.equal(otherIpRes.remaining, 4);
+
+  // After 15 minutes window passes, quota should reset
+  const afterExpiry = limiter.check(ip, startTime + (15 * 60 * 1000) + 1000);
+  assert.equal(afterExpiry.allowed, true, 'Request after window expiry should be allowed');
+  assert.equal(afterExpiry.remaining, 4);
+});
+
+
+

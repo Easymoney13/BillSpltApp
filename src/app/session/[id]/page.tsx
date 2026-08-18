@@ -93,7 +93,7 @@ function SessionWorkspaceInner() {
   const t = langCtx?.t || ((k: string, p?: any, d?: string) => d || k);
   const formatPrice = langCtx?.formatPrice || ((a: number) => `${a || 0}`);
   const formatDual = langCtx?.formatDual || ((a: number) => ({ primary: `${a || 0}` }));
-  const profile = langCtx?.profile || { displayName: 'User', avatarColor: '#7C3AED' };
+  const profile = langCtx?.profile || { displayName: 'User', avatarColor: '#10B981' };
   const isRtl = langCtx?.isRtl || false;
   const theme = langCtx?.theme || 'light';
   const setTheme = langCtx?.setTheme || (() => {});
@@ -106,6 +106,7 @@ function SessionWorkspaceInner() {
   const [showAddItemModal, setShowAddItemModal] = useState<boolean>(false);
   const [showEditItemModal, setShowEditItemModal] = useState<boolean>(false);
   const [showSettleModal, setShowSettleModal] = useState<boolean>(false);
+  const [showCompletionReaction, setShowCompletionReaction] = useState<boolean>(false);
   const [isRounded, setIsRounded] = useState<boolean>(false);
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [showAttachGroupModal, setShowAttachGroupModal] = useState<boolean>(false);
@@ -369,6 +370,10 @@ function SessionWorkspaceInner() {
 
   const connectWebSocket = (id: string, accessToken: string) => {
     try {
+      if (socketRef.current) {
+        try { socketRef.current.close(); } catch (_) {}
+      }
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}`;
       const ws = new WebSocket(wsUrl);
@@ -394,6 +399,18 @@ function SessionWorkspaceInner() {
           console.error(e);
         }
       };
+
+      ws.onclose = () => {
+        setTimeout(() => {
+          if (socketRef.current === ws) {
+            connectWebSocket(id, accessToken);
+          }
+        }, 2500);
+      };
+
+      ws.onerror = () => {
+        try { ws.close(); } catch (_) {}
+      };
     } catch (err) {
       console.error('WebSocket connection error:', err);
     }
@@ -401,6 +418,29 @@ function SessionWorkspaceInner() {
 
   const sendAction = async (action: string, payload: any = {}) => {
     triggerHaptic(action === 'SETTLE_ALL' ? 'success' : action === 'SPLIT_EVERYONE' ? 'medium' : 'light');
+    
+    // Instant Optimistic UI Update for zero-latency local feedback
+    if (action === 'TOGGLE_CLAIM' && payload.itemId) {
+      setSession((prev: any) => {
+        if (!prev || !Array.isArray(prev.items)) return prev;
+        const targetMember = currentMemberId;
+        const updatedItems = prev.items.map((it: any) => {
+          if (it.id === payload.itemId) {
+            const claimants = Array.isArray(it.claimedBy) ? it.claimedBy : [];
+            const hasClaimed = claimants.includes(targetMember);
+            return {
+              ...it,
+              claimedBy: hasClaimed
+                ? claimants.filter((c: string) => c !== targetMember)
+                : [...claimants, targetMember]
+            };
+          }
+          return it;
+        });
+        return { ...prev, items: updatedItems };
+      });
+    }
+
     try {
       const res = await fetch('/api/session/action', {
         method: 'POST',
@@ -417,10 +457,12 @@ function SessionWorkspaceInner() {
       return true;
     } catch (err) {
       console.error('Session action failed:', err);
+      fetchSessionData(session?.id || sessionId);
       alert(err instanceof Error ? err.message : 'Could not update the session.');
       return false;
     }
   };
+
 
   const handleAddItemSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -528,11 +570,13 @@ function SessionWorkspaceInner() {
   const canPayPayer = isValidIsraeliPhone(activePayerPhone);
 
   const triggerCelebration = () => {
+    setShowCompletionReaction(true);
+    triggerHaptic('success');
     try {
       confetti({
-        particleCount: 120,
-        spread: 70,
-        origin: { y: 0.6 }
+        particleCount: 160,
+        spread: 80,
+        origin: { y: 0.5 }
       });
     } catch (e) {
       // ignore
@@ -587,7 +631,7 @@ function SessionWorkspaceInner() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="w-10 h-10 rounded-full bg-[#7C3AED] text-white flex items-center justify-center hover:bg-indigo-700 transition-colors shadow-sm font-bold active:scale-95"
+            className="w-10 h-10 rounded-full bg-slate-900 dark:bg-emerald-600 text-white flex items-center justify-center hover:bg-slate-800 dark:hover:bg-emerald-500 transition-colors shadow-sm font-bold active:scale-95"
             title="Share & Invite"
           >
             <Share2 className="w-5 h-5" />
@@ -616,7 +660,7 @@ function SessionWorkspaceInner() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="py-1 px-3 rounded-full bg-[#7C3AED] hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1 transition-all shadow-sm active:scale-95"
+            className="py-1 px-3 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1 transition-all shadow-sm active:scale-95"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>{t('inviteBtn', undefined, 'Invite')}</span>
@@ -628,37 +672,27 @@ function SessionWorkspaceInner() {
           {validMembers.map((member: any) => {
             const isMe = member?.id === currentMemberId;
             const validName = member?.name && member?.name.trim() !== '?' ? member.name.trim() : 'Guest';
-            const initials = validName.substring(0, 2).toUpperCase();
 
             return (
               <div
                 key={member?.id}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 shrink-0 text-xs font-semibold text-slate-800 dark:text-slate-200"
               >
-                <div
-                  className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] text-slate-950 shadow-sm overflow-hidden"
-                  style={{ backgroundColor: (isMe && profile?.avatarUrl) ? 'transparent' : (member?.avatarColor || '#FFFFFF') }}
-                >
-                  {isMe && profile?.avatarUrl ? (
-                    <img
-                      src={profile.avatarUrl}
-                      alt={validName}
-                      className="w-full h-full object-cover rounded-full"
-                    />
-                  ) : (
-                    initials
-                  )}
+                <div className="w-5 h-5 rounded-full flex items-center justify-center bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                  </svg>
                 </div>
 
                 <span>{validName} {isMe ? t('youSuffix', undefined, '(You)') : ''}</span>
 
                 {member?.isHost && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-[#7C3AED] text-[9px] font-extrabold text-white">
+                  <span className="px-1.5 py-0.5 rounded-full bg-slate-900 dark:bg-emerald-600 text-[9px] font-extrabold text-white">
                     {t('hostBadge', undefined, 'HOST')}
                   </span>
                 )}
                 {member?.settled && (
-                  <span className="text-[#7C3AED] text-xs font-bold">✓</span>
+                  <span className="text-emerald-500 text-xs font-bold">✓</span>
                 )}
               </div>
             );
@@ -681,32 +715,25 @@ function SessionWorkspaceInner() {
             onClick={() => setShowAttachGroupModal(true)}
             className="w-full py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-extrabold flex items-center justify-center gap-2 transition-all border border-dashed border-slate-300 dark:border-slate-700 active:scale-95 shadow-sm"
           >
-            <Link2 className="w-4 h-4 text-[#7C3AED]" />
+            <Link2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>{t('attachBillTitle', undefined, 'Attach Bill to Group')} 🔗</span>
           </button>
         )}
 
-        {/* Dedicated "Who paid for the bill?" Selector Bar */}
-        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-[#7C3AED] shrink-0" />
-            <div>
-              <span className="font-extrabold text-slate-900 dark:text-white block leading-tight text-[11px]">
-                {t('whoPaidLabel', undefined, 'Who paid the bill?')}
-              </span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-none">
-                {isEachPaid
-                  ? t('eachPaidShareSub', undefined, 'Each pays their own share directly')
-                  : t('singlePayerSub', { name: activePayerName }, `${activePayerName} paid upfront`)}
-              </span>
-            </div>
+        {/* Dedicated "Who paid?" Selector Bar - Clean, spacious & uncluttered */}
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-extrabold text-slate-900 dark:text-white text-xs">
+              {t('whoPaidShort', undefined, 'Who paid?')}
+            </span>
           </div>
 
           <select
             value={activePayerId}
             onChange={(e) => sendAction('SET_PAYER', { payerId: e.target.value })}
             disabled={isSessionClosed}
-            className="py-1 px-2.5 rounded-lg bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white shadow-xs focus:ring-1 focus:ring-purple-500 cursor-pointer max-w-[170px]"
+            className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-white shadow-xs focus:ring-2 focus:ring-purple-500/20 cursor-pointer max-w-[220px] truncate"
           >
             <option value="each">👥 {t('eachPaidShareOption', undefined, 'Each paid their share')}</option>
             {validMembers.map((m: any) => (
@@ -717,6 +744,7 @@ function SessionWorkspaceInner() {
           </select>
         </div>
       </div>
+
 
       {/* Shared Receipt Items Section */}
       <div className="flex-1 space-y-4">
@@ -751,7 +779,7 @@ function SessionWorkspaceInner() {
 
               <button
                 onClick={() => sendAction('SPLIT_EVERYONE', {})}
-                className="py-1.5 px-3.5 rounded-full bg-[#7C3AED] hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                className="py-1.5 px-3.5 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
               >
                 <Zap className="w-3.5 h-3.5 fill-white" />
                 <span>{t('splitAllBtn', undefined, 'Split All')}</span>
@@ -776,13 +804,13 @@ function SessionWorkspaceInner() {
                 onClick={isSessionClosed ? undefined : () => sendAction('TOGGLE_CLAIM', { itemId: item?.id, memberId: currentMemberId })}
                 className={`relative p-5 transition-all flex flex-col ${isSessionClosed ? '' : 'cursor-pointer'} ${
                   isClaimedByMe
-                    ? 'bg-indigo-50/20 dark:bg-purple-950/10'
+                    ? 'bg-emerald-50/30 dark:bg-emerald-950/10'
                     : 'hover:bg-slate-50/50 dark:hover:bg-white/[0.01]'
                 }`}
               >
                 {/* Visual left accent bar when claimed */}
                 {isClaimedByMe && (
-                  <div className="absolute top-0 bottom-0 w-1 bg-[#7C3AED] ltr:left-0 rtl:right-0" />
+                  <div className="absolute top-0 bottom-0 w-1 bg-emerald-500 ltr:left-0 rtl:right-0" />
                 )}
 
                 <div className="flex items-start justify-between mb-1">
@@ -803,7 +831,7 @@ function SessionWorkspaceInner() {
                           <button
                             type="button"
                             onClick={(e) => handleOpenEditModal(item, e)}
-                            className="p-1 rounded-full text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                            className="p-1 rounded-full text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                             title={t('editItemTitle', undefined, 'Edit Item')}
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -851,31 +879,19 @@ function SessionWorkspaceInner() {
                         const m = validMembers.find((mem: any) => mem?.id === cId);
                         const isMeClaimant = cId === currentMemberId;
                         const fullName = m?.name && m?.name.trim() !== '?' ? m.name.trim() : (isMeClaimant ? (profile?.displayName || 'User') : 'Member');
-                        const initials = fullName.substring(0, 2).toUpperCase();
 
                         return (
                           <div
                             key={cId}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
                               isMeClaimant
-                                ? 'bg-[#7C3AED] text-white shadow-sm'
+                                ? 'bg-emerald-600 text-white shadow-xs'
                                 : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200/50 dark:border-white/5'
                             }`}
                           >
-                            <div
-                              className="w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold text-[8px] text-slate-950 shrink-0 overflow-hidden"
-                              style={{ backgroundColor: (isMeClaimant && profile?.avatarUrl) ? 'transparent' : (m?.avatarColor || profile?.avatarColor || '#FFFFFF') }}
-                            >
-                              {isMeClaimant && profile?.avatarUrl ? (
-                                <img
-                                  src={profile.avatarUrl}
-                                  alt={fullName}
-                                  className="w-full h-full object-cover rounded-full"
-                                />
-                              ) : (
-                                initials
-                              )}
-                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                            </svg>
 
                             <span>{fullName}</span>
                             {isMeClaimant && <Check className="w-2.5 h-2.5 text-white stroke-[3]" />}
@@ -905,7 +921,7 @@ function SessionWorkspaceInner() {
       {isCurrentUserHost && !isSessionClosed && <button
         onClick={() => setShowAddItemModal(true)}
         aria-label={t('addItemBtn', undefined, 'Add Item')}
-        className="fixed bottom-24 ltr:right-6 rtl:left-6 z-30 w-14 h-14 rounded-full bg-[#7C3AED] text-white font-extrabold shadow-float flex items-center justify-center hover:scale-105 transition-all active:scale-95"
+        className="fixed bottom-24 ltr:right-6 rtl:left-6 z-30 w-14 h-14 rounded-full bg-slate-900 dark:bg-emerald-600 text-white font-extrabold shadow-float flex items-center justify-center hover:scale-105 transition-all active:scale-95"
       >
         <Plus className="w-7 h-7" />
       </button>}
@@ -923,7 +939,7 @@ function SessionWorkspaceInner() {
                   {shareDual?.primary || '0.00'}
                 </span>
                 {shareDual?.secondary && (
-                  <span className="text-xs font-semibold text-[#7C3AED] dark:text-[#7C3AED]">
+                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                     ({shareDual.secondary})
                   </span>
                 )}
@@ -934,7 +950,7 @@ function SessionWorkspaceInner() {
 
         <button
           onClick={() => setShowSettleModal(true)}
-          className="py-3.5 px-6 rounded-xl bg-[#7C3AED] hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-600/30 text-sm transition-all active:scale-95"
+          className="py-3.5 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold shadow-lg shadow-slate-900/20 text-sm transition-all active:scale-95"
         >
           {t('settleAndPayBtn', undefined, 'Settle & Pay')}
         </button>
@@ -1150,7 +1166,7 @@ function SessionWorkspaceInner() {
                         }}
                         className={`py-2 rounded-full text-xs font-extrabold transition-all border active:scale-95 duration-100 ${
                           tipPercentage === pct && !customTipInput
-                            ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-sm'
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                             : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
@@ -1173,7 +1189,7 @@ function SessionWorkspaceInner() {
                       onBlur={() => sendAction('SET_TIP', { tipPercentage })}
                       min="0"
                       max="100"
-                      className="w-full py-2 pl-3 pr-7 rounded-full text-xs text-center font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-750 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#7C3AED] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-full py-2 pl-3 pr-7 rounded-full text-xs text-center font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-750 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-slate-400 pointer-events-none">%</span>
                   </div>
@@ -1206,7 +1222,7 @@ function SessionWorkspaceInner() {
                         }}
                         className={`py-0.5 px-2 rounded-full text-[10px] font-extrabold transition-all border ${
                           isRounded
-                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
                             : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
                         }`}
                       >
@@ -1224,7 +1240,7 @@ function SessionWorkspaceInner() {
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-[#7C3AED]" />
+                    <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span className="text-xs font-bold text-slate-900 dark:text-white">
                       {t('whoPaidLabel', undefined, 'Who paid the bill?')}
                     </span>
@@ -1258,7 +1274,7 @@ function SessionWorkspaceInner() {
                     {t('payPayerTitle', { name: activePayerName }, `Pay ${activePayerName}`)}
                   </label>
                   {canPayPayer ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => {
@@ -1268,9 +1284,9 @@ function SessionWorkspaceInner() {
                             storeName: session?.storeName || 'BillSplit Room'
                           });
                         }}
-                        className="py-3 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
+                        className="py-3 px-3 rounded-xl bg-gradient-to-r from-[#7026FF] to-[#00C2F3] text-white font-black text-xs shadow-sm hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
                       >
-                        <span>{t('payWithBitBtn', undefined, 'Pay with Bit 📲')}</span>
+                        <span>Bit (₪{finalDueVal.toFixed(2)})</span>
                       </button>
                       <button
                         type="button"
@@ -1290,21 +1306,21 @@ function SessionWorkspaceInner() {
                             window.open(`https://payboxapp.page.link/pay?phone=${phone}&amount=${amount}`, '_blank');
                           }
                         }}
-                        className="py-3 px-4 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
+                        className="py-3 px-3 rounded-xl bg-gradient-to-r from-[#005082] to-[#00C5B4] text-white font-black text-xs shadow-sm hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
                       >
-                        <span>{t('payWithPayboxBtn', undefined, 'Pay with Paybox 📦')}</span>
+                        <span>Paybox (₪{finalDueVal.toFixed(2)})</span>
                       </button>
                     </div>
                   ) : (
-                    <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                      {t('paymentPhoneMissingPayer', { name: activePayerName }, `Bit and PayBox will become available after ${activePayerName} adds a valid payment phone number.`)}
-                    </p>
+                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-700 dark:text-amber-300 font-medium text-center">
+                      {t('payerPhoneNotSetNote', { name: activePayerName }, `${activePayerName} has not added a payment phone number yet. Please settle in person.`)}
+                    </div>
                   )}
                 </div>
               )}
 
               {/* Settle Action Buttons */}
-              <div className="pt-3">
+              <div className="pt-2">
                 <button
                   onClick={async () => {
                     const success = await sendAction('SETTLE_ALL', {});
@@ -1339,7 +1355,7 @@ function SessionWorkspaceInner() {
                     localStorage.removeItem('billsplit_active_session');
                     setTimeout(() => router.push('/?tab=history'), 1200);
                   }}
-                  className="w-full py-4 rounded-full bg-gradient-to-r from-[#7C3AED] via-[#6366F1] to-[#4F46E5] text-white font-extrabold text-sm shadow-[0_8px_24px_rgba(124,58,237,0.3)] hover:shadow-[0_8px_24px_rgba(124,58,237,0.5)] flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
+                  className="w-full py-4 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-extrabold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
                 >
                   <CheckCircle2 className="w-5 h-5 text-white" />
                   <span>
@@ -1360,6 +1376,51 @@ function SessionWorkspaceInner() {
         userGroups={userGroups}
         onAttach={handleAttachToGroup}
       />
+
+      {/* Centered Celebration Reaction Modal */}
+      {showCompletionReaction && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn"
+          onClick={() => setShowCompletionReaction(false)}
+        >
+          <div 
+            className="w-full max-w-xs rounded-3xl p-6 bg-white dark:bg-[#121824] border border-emerald-500/30 text-center space-y-4 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Animated Radiant Check Circle */}
+            <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping opacity-75" />
+              <div className="relative w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-[0_0_30px_rgba(16,185,129,0.5)] flex items-center justify-center">
+                <div className="w-full h-full rounded-full bg-white dark:bg-[#121824] flex items-center justify-center text-emerald-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-emerald-500 animate-bounce-short">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                {t('settleSuccessTitle', undefined, 'Bill Split Settled!')}
+              </h3>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                {t('settleSuccessDesc', undefined, 'All done! Payments and records are archived.')}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowCompletionReaction(false);
+                router.push('/?tab=history');
+              }}
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-extrabold text-xs shadow-md hover:brightness-110 active:scale-95 transition-all"
+            >
+              <span>{t('viewHistoryBtn', undefined, 'View in History')}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

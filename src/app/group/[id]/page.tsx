@@ -36,7 +36,9 @@ import { SwipeableCard } from '../../../components/SwipeableCard';
 import { compressReceiptImage } from '../../../../lib/imageUtils';
 import { scanBillImageInBrowser, scanBillImageRawText } from '../../../../lib/ocrScanner';
 import { getCookie, setCookie } from '../../../../lib/cookies';
+import { formatCurrency } from '../../../../lib/i18n';
 import { isValidIsraeliPhone, triggerBitPayment } from '../../../../lib/bitDeepLink';
+
 import { triggerHaptic } from '../../../../lib/haptics';
 import { clearRoomCredentials, getRoomToken, roomHeaders, saveRoomCredentials } from '../../../../lib/roomTokens';
 
@@ -445,7 +447,7 @@ export default function GroupWorkspacePage() {
 
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-5 bg-slate-50 dark:bg-[#0A0E17] text-slate-900 dark:text-white">
-        <RefreshCw className="w-8 h-8 animate-spin text-[#7C3AED] mb-2" />
+        <RefreshCw className="w-8 h-8 animate-spin text-emerald-500 mb-2" />
         <p className="text-xs font-bold">Loading Group Workspace...</p>
       </div>
     );
@@ -536,8 +538,10 @@ export default function GroupWorkspacePage() {
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-[#7C3AED] dark:text-[#8B5CF6]">
-                  <Camera className="w-5 h-5 stroke-[2.2]" />
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                  </svg>
                 </div>
                 <div>
                   <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-snug">{t('scanCameraOption', undefined, 'Scan Receipt Camera')}</h4>
@@ -553,7 +557,7 @@ export default function GroupWorkspacePage() {
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-[#7C3AED] dark:text-[#8B5CF6]">
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
                   <Upload className="w-5 h-5" />
                 </div>
                 <div>
@@ -570,8 +574,10 @@ export default function GroupWorkspacePage() {
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 text-[#7C3AED] dark:text-[#8B5CF6]">
-                  <FilePlus className="w-5 h-5" />
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+                  </svg>
                 </div>
                 <div>
                   <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-snug">{t('manualSplitOption', undefined, 'Create Bill Manually')}</h4>
@@ -596,7 +602,7 @@ export default function GroupWorkspacePage() {
           <h1 className="font-extrabold text-base text-slate-900 dark:text-white">{group.name}</h1>
           <button
             onClick={() => setShowQrModal(true)}
-            className="inline-flex items-center gap-1 text-xs font-mono text-purple-600 dark:text-purple-400 font-bold hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
             title="Tap to Share Group"
           >
             <QrCode className="w-3 h-3" />
@@ -615,7 +621,7 @@ export default function GroupWorkspacePage() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="py-1.5 px-3 rounded-full bg-[#7C3AED] hover:bg-indigo-700 text-white flex items-center gap-1.5 transition-all shadow-sm font-bold text-xs active:scale-95"
+            className="py-1.5 px-3 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-all shadow-sm font-bold text-xs active:scale-95"
             title="Share Group"
           >
             <Share2 className="w-3.5 h-3.5" />
@@ -631,8 +637,14 @@ export default function GroupWorkspacePage() {
                 try {
                   const res = await fetch(`/api/groups/${group.id}${isGroupHost ? '' : '/leave'}`, {
                     method: isGroupHost ? 'DELETE' : 'POST',
-                    headers: roomHeaders('group', group.id, !isGroupHost),
-                    ...(isGroupHost ? {} : { body: '{}' }),
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...roomHeaders('group', group.id, !isGroupHost),
+                    },
+                    body: isGroupHost ? undefined : JSON.stringify({
+                      memberId: currentMemberId,
+                      name: profile?.displayName || '',
+                    }),
                   });
                   const data = await res.json();
                   if (!res.ok) throw new Error(data.error || 'Could not leave group');
@@ -652,13 +664,15 @@ export default function GroupWorkspacePage() {
                   setCookie('billsplit_user_groups', updated);
                   localStorage.setItem('billsplit_user_groups', JSON.stringify(updated));
 
-                  const userKey = (profile?.displayName || '').trim().toLowerCase();
+                  const userKey = (profile?.displayName || '').trim();
                   if (userKey) {
                     localStorage.setItem(`billsplit_user_groups_${userKey}`, JSON.stringify(updated));
+                    localStorage.setItem(`billsplit_user_groups_${userKey.toLowerCase()}`, JSON.stringify(updated));
                   }
 
                   clearRoomCredentials('group', group.id);
                   router.push('/');
+
                 } catch (err) {
                   alert(err instanceof Error ? err.message : 'Could not leave group');
                 }
@@ -700,9 +714,9 @@ export default function GroupWorkspacePage() {
               setShowStartSplitModal(true);
               triggerHaptic('medium');
             }}
-            className="w-full py-3.5 px-6 rounded-2xl bg-white text-[#7C3AED] hover:bg-slate-50 font-black text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-6 rounded-2xl bg-white text-emerald-600 hover:bg-slate-50 font-black text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-4 h-4 text-[#7C3AED] animate-pulse" />
+            <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
             <span>{t('startSplitBtn', undefined, 'Start Split')}</span>
           </button>
         </div>
@@ -712,16 +726,12 @@ export default function GroupWorkspacePage() {
       <div className="photo-card p-3 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-[#222C3D] shadow-sm space-y-2">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
           <div className="flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-slate-900 dark:text-white" />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-900 dark:text-white">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+            </svg>
             <h3 className="font-bold text-xs text-slate-900 dark:text-white">{t('debtMinimizationTitle', undefined, 'Debt Minimization Settlement')}</h3>
           </div>
         </div>
-
-        {unassignedAmount > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
-            {t('unassignedItemsWarning', { amount: unassignedAmount.toFixed(2) }, `${unassignedAmount.toFixed(2)} ${group.currency || 'NIS'} is still unassigned. Settlement excludes it until someone claims those items.`)}
-          </div>
-        )}
 
         {/* Member Avatars Live Net Balance Badges */}
         <div className="space-y-1">
@@ -730,9 +740,6 @@ export default function GroupWorkspacePage() {
           </span>
           <div className="grid grid-cols-2 gap-2.5 pt-1">
             {balances.map((b: any) => {
-              const m = validMembers.find((mem: any) => mem.id === b.memberId) || { name: b.name, avatarColor: '#7C3AED' };
-              const initials = (b.name || 'M').substring(0, 2).toUpperCase();
-              const isMe = b.memberId === currentMemberId;
               const isCreditor = b.netBalance > 0.01;
               const isDebtor = b.netBalance < -0.01;
 
@@ -741,19 +748,10 @@ export default function GroupWorkspacePage() {
                   key={b.memberId}
                   className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs transition-all duration-200"
                 >
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center font-black text-xs text-white shadow-sm shrink-0 overflow-hidden"
-                    style={{ backgroundColor: (isMe && profile?.avatarUrl) ? 'transparent' : (m.avatarColor || '#7C3AED') }}
-                  >
-                    {isMe && profile?.avatarUrl ? (
-                      <img
-                        src={profile.avatarUrl}
-                        alt={b.name}
-                        className="w-full h-full object-cover rounded-full"
-                      />
-                    ) : (
-                      initials
-                    )}
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700 shrink-0 shadow-xs">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                    </svg>
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span className="text-xs font-black text-slate-800 dark:text-white leading-tight truncate">
@@ -768,7 +766,7 @@ export default function GroupWorkspacePage() {
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-transparent'
                       }`}
                     >
-                      {isCreditor ? `+${b.netBalance.toFixed(2)}` : isDebtor ? `-${Math.abs(b.netBalance).toFixed(2)}` : `0.00`}
+                      {isCreditor ? `+${formatCurrency(b.netBalance, group.currency || 'NIS')}` : isDebtor ? `-${formatCurrency(Math.abs(b.netBalance), group.currency || 'NIS')}` : formatCurrency(0, group.currency || 'NIS')}
                     </span>
                   </div>
                 </div>
@@ -805,7 +803,7 @@ export default function GroupWorkspacePage() {
                 try {
                   navigator.clipboard.writeText(`${cleanPhone} ${amt}`);
                 } catch (e) {}
-                alert(`Opening Paybox!\nRecipient: ${tx.toName} (${cleanPhone})\nAmount: ${amt} ${group.currency || 'NIS'}\n(Copied to clipboard 📋)`);
+                alert(`Opening Paybox!\nRecipient: ${tx.toName} (${cleanPhone})\nAmount: ${formatCurrency(tx.amount || 0, group.currency || 'NIS')}\n(Copied to clipboard 📋)`);
                 const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                 if (isMobile) {
                   window.location.href = `paybox://pay?phone=${cleanPhone}&amount=${amt}`;
@@ -829,9 +827,10 @@ export default function GroupWorkspacePage() {
                       <span className="text-emerald-500 font-extrabold">{tx.toName}</span>
                     </div>
                     <span className="text-xs font-mono font-black text-slate-900 dark:text-white block">
-                      {tx.amount.toFixed(2)} {group.currency || 'NIS'}
+                      {formatCurrency(tx.amount || 0, group.currency || 'NIS')}
                     </span>
                   </div>
+
 
                   {hasPaymentPhone ? (
                     <div className="flex items-center gap-1.5">
@@ -920,9 +919,20 @@ export default function GroupWorkspacePage() {
                       {/* Row 1: Title & Total Amount */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-0.5 min-w-0 flex-1">
-                          <h4 className="font-extrabold text-slate-900 dark:text-white text-xs leading-tight truncate">
-                            {bill.title}
-                          </h4>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {bill.status === 'settled' ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-emerald-500 shrink-0" aria-label="Settled">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                              </svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-amber-500 shrink-0" aria-label="Active">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                              </svg>
+                            )}
+                            <h4 className="font-extrabold text-slate-900 dark:text-white text-xs leading-tight truncate">
+                              {bill.title}
+                            </h4>
+                          </div>
                           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-tight">
                             {bill.date} • {t('paidByLabel', { name: payerName }, `Paid by ${payerName}`)}
                           </p>
@@ -930,7 +940,7 @@ export default function GroupWorkspacePage() {
 
                         <div className="shrink-0 text-right">
                           <span className="font-mono font-black text-slate-900 dark:text-white text-xs">
-                            {bill.amount?.toFixed(2)} {group.currency || 'NIS'}
+                            {formatCurrency(bill.amount || 0, group.currency || 'NIS')}
                           </span>
                         </div>
                       </div>
@@ -945,7 +955,7 @@ export default function GroupWorkspacePage() {
                             saveRoomCredentials('session', targetSessionId, currentMemberId, getRoomToken('group', group.id));
                             router.push(`/session/${targetSessionId}?groupId=${group.id}`);
                           }}
-                          className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#7C3AED] via-[#6366F1] to-[#4F46E5] hover:from-[#6D28D9] hover:to-[#4338CA] text-white font-extrabold text-xs shadow-md shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                          className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md shadow-slate-900/10 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                           title="Open Live Claiming Session"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
@@ -1014,8 +1024,9 @@ export default function GroupWorkspacePage() {
                               >
                                 <div className="flex justify-between items-center text-slate-900 dark:text-white">
                                   <span className="font-bold">{item.name}</span>
-                                  <span className="font-mono font-extrabold">{item.price?.toFixed(2)} {group.currency || 'NIS'}</span>
+                                  <span className="font-mono font-extrabold">{formatCurrency(item.price || 0, group.currency || 'NIS')}</span>
                                 </div>
+
 
                                 {/* Member Claim Chips */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -1035,20 +1046,9 @@ export default function GroupWorkspacePage() {
                                             : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-200'
                                         } ${!isMe ? 'cursor-default opacity-70' : ''}`}
                                       >
-                                        <span
-                                          className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] text-white font-black overflow-hidden"
-                                          style={{ backgroundColor: (isMe && profile?.avatarUrl) ? 'transparent' : (m.avatarColor || '#7C3AED') }}
-                                        >
-                                          {isMe && profile?.avatarUrl ? (
-                                            <img
-                                              src={profile.avatarUrl}
-                                              alt={m.name}
-                                              className="w-full h-full object-cover rounded-full"
-                                            />
-                                          ) : (
-                                            initials
-                                          )}
-                                        </span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                                        </svg>
                                         <span>{m.name}</span>
                                         {isClaimed && <CheckCircle2 className="w-3 h-3 text-emerald-400 dark:text-emerald-600" />}
                                       </button>

@@ -23,7 +23,8 @@ export const ManualBillModal: React.FC<ManualBillModalProps> = ({
   onLaunchSession,
   initialData = null,
 }) => {
-  const { t, currency, isRtl } = useLanguage();
+  const { t, currency, isRtl, formatPrice } = useLanguage();
+
 
   const [storeName, setStoreName] = useState('');
   const [selectedCurrency, setSelectedCurrency] = useState<string>(currency || 'NIS');
@@ -116,7 +117,9 @@ export const ManualBillModal: React.FC<ManualBillModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white shrink-0">
-              <FileText className="w-5 h-5 stroke-[2.2]" />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+              </svg>
             </div>
             <div>
               <h3 className="font-extrabold text-base leading-tight tracking-tight text-slate-900 dark:text-white">
@@ -179,8 +182,9 @@ export const ManualBillModal: React.FC<ManualBillModalProps> = ({
                 {t('receiptItemsTitle', undefined, 'Receipt Items')} ({items.length})
               </span>
               <span className="text-xs font-mono font-black text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">
-                Subtotal: {calculateSubtotal().toFixed(2)} {selectedCurrency}
+                Subtotal: {formatPrice(calculateSubtotal(), selectedCurrency)}
               </span>
+
             </div>
 
             <div className="space-y-2.5">

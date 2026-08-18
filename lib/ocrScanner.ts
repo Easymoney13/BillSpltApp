@@ -47,14 +47,41 @@ export async function scanBillImageRawText(imageSrc: string): Promise<string | n
 
 function isTotalOrTaxLine(name: string): boolean {
   if (typeof name !== 'string') return false;
-  const clean = name.toLowerCase().replace(/[\s'"“״”`׳:-]+/g, '');
+  const raw = name.toLowerCase().trim();
+  const clean = raw.replace(/[\s'"“״”`׳.\-–—:;=_\/\\]+/g, '');
+  
   const totalKeywords = [
-    'total', 'subtotal', 'grandtotal', 'tax', 'vat', 'discount', 
-    'לתשלום', 'סהכ', 'סחכ', 'סךהכל', 'סכהכל', 'סחיכ', 'סהיק',
-    'מעמ', 'מזומן', 'אשראי', 'עודף'
+    'total', 'subtotal', 'sub-total', 'grandtotal', 'balance', 'balancedue',
+    'amountdue', 'totaldue', 'finaltotal', 'billtotal', 'checktotal', 'nettotal',
+    'tax', 'vat', 'salestax', 'servicecharge', 'gratuity',
+    'discount', 'coupon', 'credit',
+    'cash', 'visa', 'mastercard', 'amex', 'creditcard', 'debitcard',
+    'changedue', 'amountpaid', 'tendered',
+    'לתשלום', 'סהכ', 'סחכ', 'סךהכל', 'סכהכל', 'סחיכ', 'סהיק', 'סהכחשבון', 'סכהכחשבון', 'סךהכלחשבון',
+    'סכוםכולל', 'סךהכול', 'סךהכוללתשלום', 'סכוםלתשלום', 'סךלתשלום', 'חשבוןלתשלום', 'חשבוןסופי',
+    'סהכבשח', 'סהכמחיר', 'סהכסופי', 'סהכלתשלום',
+    'מעמ', 'דמישירות',
+    'הנחה', 'זיכוי', 'שובר', 'קופון',
+    'מזומן', 'כרטיסאשראי', 'אשראי', 'עודף', 'סכוםששולם',
+    'חשבוןמס', 'חשבוניתמס'
   ];
-  return totalKeywords.some(keyword => clean.includes(keyword));
+  
+  if (totalKeywords.some(keyword => clean.includes(keyword))) {
+    return true;
+  }
+
+  const totalRegexes = [
+    /\b(total|sub-?total|grand\s*total|amount\s*due|balance\s*due|final\s*total)\b/i,
+    /\b(tax|vat|service\s*charge|gratuity)\b/i,
+    /\b(cash\s*paid|change\s*due|visa|mastercard|amex|credit\s*card)\b/i,
+    /(סה["״׳'`]?כ|סך\s*ה?כ[וֹ]?ל|ס[הח]כ)\s*(חשבון|לתשלום|סופי|כולל|בש["״]?ח)?/i,
+    /(לתשלום|סכום\s*לתשלום|סך\s*לתשלום|חשבון\s*לתשלום)/i,
+    /(מע["״׳'`]?מ|דמי\s*שירות|הנחה|זיכוי)/i,
+  ];
+
+  return totalRegexes.some(regex => regex.test(raw));
 }
+
 
 export function parseReceiptText(rawText: string): ParsedBill | null {
   if (!rawText || rawText.trim().length === 0) return null;

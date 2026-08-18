@@ -2,29 +2,34 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Default deny: All unmatched collections are inaccessible from client SDKs
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // 1. Users Collection
+    // Only the authenticated owner can read or write their own user profile document directly.
     match /users/{userId} {
-      // Anyone can check user status, but only the authenticated user can edit their profile/settings
-      allow read: if true;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
     // 2. Sessions Collection (Real-time active split rooms)
+    // Managed exclusively through backend API server (Admin SDK) to enforce room tokens & member verification
     match /sessions/{sessionId} {
-      // Allow guest and host interaction for splits
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     // 3. Groups Collection (Shared group expense rooms)
+    // Managed exclusively through backend API server (Admin SDK) to enforce member authentication
     match /groups/{groupId} {
-      // Allow group members to read/write bills and join by invitation/code
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     // 4. History Collection (Settled bills archive)
+    // Managed exclusively through backend API server (Admin SDK) to isolate user payment records
     match /history/{historyId} {
-      // Allow read and write access for histories
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

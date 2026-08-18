@@ -2,8 +2,10 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Sparkles, Phone, User, Globe, LogOut } from 'lucide-react';
-import { translations, formatCurrency, convertCurrency, formatDualPrice, updateLiveExchangeRates } from '../../lib/i18n';
+import defaultTranslations, { translations as namedTranslations, formatCurrency, convertCurrency, formatDualPrice, updateLiveExchangeRates } from '../../lib/i18n';
 import { getCookie, setCookie } from '../../lib/cookies';
+
+const i18nDictionary: Record<string, Record<string, string>> = defaultTranslations || namedTranslations || {};
 
 type Language = 'en' | 'he';
 type Currency = 'USD' | 'NIS';
@@ -63,7 +65,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [profile, setProfile] = useState<UserProfile>({
     displayName: '',
-    avatarColor: '#7C3AED'
+    avatarColor: '#10B981'
   });
 
 
@@ -142,7 +144,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (parsedProfile?.displayName) {
         savedLocalProfile = {
           displayName: String(parsedProfile.displayName),
-          avatarColor: String(parsedProfile.avatarColor || '#7C3AED'),
+          avatarColor: String(parsedProfile.avatarColor || '#10B981'),
           avatarUrl: typeof parsedProfile.avatarUrl === 'string' ? parsedProfile.avatarUrl : undefined,
           phoneNumber: typeof parsedProfile.phoneNumber === 'string' ? parsedProfile.phoneNumber : localPhone,
         };
@@ -191,7 +193,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               if (data && data.success && data.user) {
                 setProfile({
                   displayName: data.user.username || user.displayName || 'Google User',
-                  avatarColor: data.user.avatarColor || '#7C3AED',
+                  avatarColor: data.user.avatarColor || '#10B981',
                   avatarUrl: savedLocalProfile?.avatarUrl || user.photoURL || undefined
                 });
 
@@ -205,12 +207,12 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               // Fallback settings
               setProfile({
                 displayName: user.displayName || 'Google User',
-                avatarColor: '#7C3AED',
+                avatarColor: '#10B981',
                 avatarUrl: savedLocalProfile?.avatarUrl || user.photoURL || undefined
               });
             }
           } else {
-            setProfile(savedLocalProfile || { displayName: '', avatarColor: '#7C3AED' });
+            setProfile(savedLocalProfile || { displayName: '', avatarColor: '#10B981' });
           }
           setAuthLoading(false);
           setIsInitialized(true);
@@ -331,8 +333,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const isRtl = language === 'he';
 
   const t = (key: string, params?: Record<string, string | number>, defaultText?: string): string => {
-    const dict = (translations && translations[language]) ? translations[language] : (translations?.en || {});
-    let str = dict[key] || translations?.en?.[key] || defaultText || key;
+    const dict = (i18nDictionary && i18nDictionary[language]) ? i18nDictionary[language] : (i18nDictionary?.en || {});
+    let str = (dict && typeof dict[key] === 'string') ? dict[key] : (i18nDictionary?.en?.[key] || defaultText || key);
     if (params && typeof str === 'string') {
       Object.keys(params).forEach((paramKey) => {
         str = str.replace(`{${paramKey}}`, String(params[paramKey]));
@@ -354,9 +356,10 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const primary = typeof formatCurrency === 'function' ? formatCurrency(val, billCurrency) : `${val} ${billCurrency}`;
     if (!currency || billCurrency === currency) return { primary };
     const converted = typeof convertCurrency === 'function' ? convertCurrency(val, billCurrency, currency) : val;
-    const secondary = `(${typeof formatCurrency === 'function' ? formatCurrency(converted, currency) : `${converted} ${currency}`})`;
+    const secondary = typeof formatCurrency === 'function' ? formatCurrency(converted, currency) : `${converted} ${currency}`;
     return { primary, secondary };
   };
+
 
 
 
@@ -420,7 +423,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 event.preventDefault();
                 const displayName = guestName.trim();
                 if (!displayName) return;
-                setProfile({ displayName, avatarColor: '#7C3AED' });
+                setProfile({ displayName, avatarColor: '#10B981' });
               }}
             >
               <input
@@ -429,12 +432,12 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 maxLength={30}
                 placeholder={language === 'he' ? 'השם שיוצג לחברים' : 'Your display name'}
                 aria-label={language === 'he' ? 'שם תצוגה' : 'Display name'}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900"
                 required
               />
               <button
                 type="submit"
-                className="w-full rounded-xl bg-[#7C3AED] py-3.5 text-sm font-extrabold text-white shadow-md transition-all active:scale-95"
+                className="w-full rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 py-3.5 text-sm font-extrabold text-white shadow-md transition-all active:scale-95"
               >
                 {language === 'he' ? 'המשך כאורח' : 'Continue as guest'}
               </button>

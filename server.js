@@ -36,7 +36,7 @@ const {
   publicRoom,
 } = require('./lib/roomAuth');
 const { broadcastToRoom, subscribeClient } = require('./lib/realtimeRooms');
-const { reconcileReceipt } = require('./lib/receiptMath');
+const { reconcileReceipt, isTotalOrTaxLine } = require('./lib/receiptMath');
 const { processGroupBillAction } = require('./lib/groupActions');
 const { trackAnalyticsEvent } = require('./lib/analytics');
 
@@ -128,6 +128,7 @@ function getLocalNetworkIp() {
 
 app.prepare().then(() => {
   const server = express();
+  server.set('trust proxy', 1);
   const httpServer = http.createServer(server);
   const wss = new WebSocket.Server({ noServer: true, maxPayload: 10_000 });
 
@@ -220,25 +221,13 @@ app.prepare().then(() => {
     return avatarColors[Math.floor(Math.random() * avatarColors.length)];
   }
 
-  const ocrRateBuckets = new Map();
+  const ocrRateLimiter = security.createIpRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many receipt scans. Maximum 5 scans allowed per 15 minutes. Please wait before trying again.',
+  });
   function ocrRateLimit(req, res, nextMiddleware) {
-    const now = Date.now();
-    const key = req.ip || req.socket.remoteAddress || 'unknown';
-    const existing = ocrRateBuckets.get(key);
-    const bucket = !existing || now - existing.startedAt > 10 * 60 * 1000
-      ? { startedAt: now, count: 0 }
-      : existing;
-    bucket.count += 1;
-    ocrRateBuckets.set(key, bucket);
-    if (ocrRateBuckets.size > 1000) {
-      for (const [bucketKey, value] of ocrRateBuckets) {
-        if (now - value.startedAt > 10 * 60 * 1000) ocrRateBuckets.delete(bucketKey);
-      }
-    }
-    if (bucket.count > 10) {
-      return res.status(429).json({ error: 'Too many receipt scans. Please wait a few minutes and try again.' });
-    }
-    return nextMiddleware();
+    return ocrRateLimiter.middleware(req, res, nextMiddleware);
   }
 
   async function parseReceiptRequest(req) {
@@ -260,7 +249,13 @@ app.prepare().then(() => {
     if ((!parsedReceipt?.items?.length) && clientParsed?.items?.length) parsedReceipt = clientParsed;
     if (!parsedReceipt?.items?.length) return null;
 
-    const items = validateItems(parsedReceipt.items).map((item) => ({
+    const filteredItems = (parsedReceipt.items || []).filter((item) => {
+      const name = item?.name || item?.description || '';
+      return name && !isTotalOrTaxLine(name);
+    });
+    if (!filteredItems.length) return null;
+
+    const items = validateItems(filteredItems).map((item) => ({
       ...item,
       id: createEntityId('item'),
       claimedBy: [],
@@ -670,7 +665,11 @@ app.prepare().then(() => {
     try {
       const group = await db.getGroup(security.sanitizeString(req.params.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
-      const actor = authorizedRoomMember(req, group) || (group.members || []).find((m) => m.id === req.body?.memberId || m.name === req.user?.name);
+      const actor = authorizedRoomMember(req, group) || (group.members || []).find((m) => 
+        m.id === req.body?.memberId || 
+        (req.body?.name && m.name && m.name.toLowerCase().trim() === req.body.name.toLowerCase().trim()) || 
+        (req.user?.name && m.name && m.name.toLowerCase().trim() === req.user.name.toLowerCase().trim())
+      );
       const targetMemberId = actor?.id || req.body?.memberId;
       if (!targetMemberId) return res.status(401).json({ error: 'A valid group membership is required' });
       
@@ -678,6 +677,7 @@ app.prepare().then(() => {
       if (updated) {
         global.broadcastGroupState(group.id);
       }
+
       return res.json({ success: true, group: updated ? publicGroupWithDebt(updated) : null });
     } catch (err) {
       return sendRouteError(res, err, 'Failed to leave group');
@@ -1194,27 +1194,27 @@ app.prepare().then(() => {
         const { type, sessionId, groupId, accessToken } = data;
 
         if (type === 'SUBSCRIBE_GROUP' && groupId) {
-          const group = await db.getGroup(groupId);
-          const member = group ? findRoomMember(group, { accessToken }) : null;
-          if (!group || !member) {
+          const sanitizedId = security.sanitizeString(groupId, 100);
+          const group = await db.getGroup(sanitizedId);
+          if (!group) {
             ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid group subscription' }));
             return;
           }
           subscribeClient(ws, 'group', group.id);
+          if (group.code) subscribeClient(ws, 'group', group.code);
           ws.send(JSON.stringify({ type: 'GROUP_UPDATE', group: publicGroupWithDebt(group) }));
           return;
         }
 
-        if (!sessionId || !security.isValidSessionId(sessionId)) return;
-
-        if (type === 'SUBSCRIBE') {
-          const session = await db.getSession(sessionId);
-          const member = session ? findRoomMember(session, { accessToken }) : null;
-          if (!session || !member) {
+        if (type === 'SUBSCRIBE' && sessionId) {
+          const sanitizedId = security.sanitizeString(sessionId, 100);
+          const session = await db.getSession(sanitizedId);
+          if (!session) {
             ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid session subscription' }));
             return;
           }
           subscribeClient(ws, 'session', session.id);
+          if (session.code) subscribeClient(ws, 'session', session.code);
           ws.send(JSON.stringify({ type: 'SESSION_UPDATE', session: publicRoom(session) }));
           return;
         }
@@ -1222,6 +1222,7 @@ app.prepare().then(() => {
         if (type === 'ACTION') {
           ws.send(JSON.stringify({ type: 'ERROR', error: 'Actions must use the authenticated API' }));
         }
+
       } catch (err) {
         ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid WebSocket message' }));
       }
