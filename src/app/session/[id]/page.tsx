@@ -36,6 +36,14 @@ import { getCookie, setCookie } from '../../../../lib/cookies';
 import { isValidIsraeliPhone, triggerBitPayment } from '../../../../lib/bitDeepLink';
 import { triggerHaptic } from '../../../../lib/haptics';
 import { getRoomMemberId, getRoomToken, roomHeaders, saveRoomCredentials } from '../../../../lib/roomTokens';
+import { getReceiptPayableTotal } from '../../../../lib/receiptMath';
+import { allocateCentsProportionally, allocateTipAdjustedCents, splitCents, toCents } from '../../../../lib/debtMinimizer';
+import { fetchPaginatedAccountData } from '../../../../lib/accountClient';
+
+function createClientActionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `action_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+}
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -147,7 +155,7 @@ function SessionWorkspaceInner() {
 
     const initializeSession = async () => {
       try {
-        const initialRes = await fetch(`/api/session/${sessionId}`);
+        const initialRes = await fetch(`/api/session/${sessionId}`, { headers: roomHeaders('session', sessionId, false) });
         if (initialRes.status === 404) {
           if (!disposed) setSessionNotFound(true);
           return;
@@ -224,12 +232,9 @@ function SessionWorkspaceInner() {
       phone: ''
     }).toString();
 
-    fetch(`/api/user/groups?${queryParams}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.groups) {
-          setUserGroups(data.groups);
-        }
+    fetchPaginatedAccountData('/api/user/groups', queryParams, 'groups')
+      .then((groups) => {
+        setUserGroups(groups);
       })
       .catch((err) => {
         console.error('Error fetching user groups:', err);
@@ -246,7 +251,7 @@ function SessionWorkspaceInner() {
   const handleAttachToGroup = async (targetGroupId: string) => {
     if (!session) return;
     try {
-      const groupRes = await fetch(`/api/groups/${targetGroupId}`);
+      const groupRes = await fetch(`/api/groups/${targetGroupId}`, { headers: roomHeaders('group', targetGroupId, false) });
       const groupData = await groupRes.json();
       if (!groupRes.ok || !groupData.group) throw new Error(groupData.error || 'Group not found');
       const resolvedGroupId = groupData.group.id;
@@ -353,7 +358,7 @@ function SessionWorkspaceInner() {
 
   const fetchSessionData = async (id: string) => {
     try {
-      const res = await fetch(`/api/session/${id}`);
+      const res = await fetch(`/api/session/${id}`, { headers: roomHeaders('session', id, false) });
       if (res.ok) {
         const data = await res.json();
         if (data.session) {
@@ -427,7 +432,7 @@ function SessionWorkspaceInner() {
         const updatedItems = prev.items.map((it: any) => {
           if (it.id === payload.itemId) {
             const claimants = Array.isArray(it.claimedBy) ? it.claimedBy : [];
-            const hasClaimed = claimants.includes(targetMember);
+            const hasClaimed = payload.claimed !== undefined ? !payload.claimed : claimants.includes(targetMember);
             return {
               ...it,
               claimedBy: hasClaimed
@@ -448,6 +453,7 @@ function SessionWorkspaceInner() {
         body: JSON.stringify({
           sessionId: session?.id || sessionId,
           action,
+          actionId: createClientActionId(),
           payload: { ...payload, memberId: currentMemberId },
         }),
       });
@@ -469,6 +475,7 @@ function SessionWorkspaceInner() {
     if (!newItemName || !newItemPrice) return;
 
     sendAction('ADD_ITEM', {
+      itemId: `item_${createClientActionId()}`,
       name: newItemName,
       price: parseFloat(newItemPrice) || 0,
       category: newItemCategory,
@@ -529,29 +536,49 @@ function SessionWorkspaceInner() {
   // Bulletproof Calculations
   const memberCalculations = useMemo(() => {
     if (!session || !validItems.length) {
-      return { myShare: 0, subtotal: 0, totalSubtotal: 0, grandTotal: 0, itemsCount: 0 };
+      return { myShare: 0, subtotal: 0, itemSubtotal: 0, receiptAdjustment: 0, totalSubtotal: 0, grandTotal: 0, itemsCount: 0 };
     }
 
-    let mySubtotal = 0;
-    let totalSubtotal = 0;
+    const itemWeights = validItems.map((item: any) => toCents(item?.price));
+    const totalItemCents = itemWeights.reduce((sum: number, cents: number) => sum + cents, 0);
+    const payableTotal = getReceiptPayableTotal(session);
+    const payableItemCents = allocateCentsProportionally(toCents(payableTotal) || totalItemCents, itemWeights);
+    let myItemSubtotalCents = 0;
+    const activeMemberIds: string[] = validMembers
+      .filter((member: any) => member?.id && member.active !== false)
+      .map((member: any) => String(member.id));
+    const activeMemberSet = new Set(activeMemberIds);
+    const payableByMember = new Map<string, number>(activeMemberIds.map((memberId) => [memberId, 0]));
 
-    validItems.forEach((item: any) => {
-      const price = typeof item?.price === 'number' ? item.price : parseFloat(item?.price) || 0;
-      totalSubtotal += price;
-      const claimants = Array.isArray(item?.claimedBy) ? item.claimedBy : [];
+    validItems.forEach((item: any, index: number) => {
+      const claimants = [...new Set(
+        (Array.isArray(item?.claimedBy) ? item.claimedBy : []).filter((memberId: string) => activeMemberSet.has(memberId))
+      )] as string[];
       if (claimants.includes(currentMemberId)) {
-        mySubtotal += price / (claimants.length || 1);
+        myItemSubtotalCents += splitCents(itemWeights[index], claimants)
+          .find((share: any) => share.memberId === currentMemberId)?.cents || 0;
       }
+      splitCents(payableItemCents[index], claimants).forEach(({ memberId, cents }: { memberId: string; cents: number }) => {
+        payableByMember.set(memberId, (payableByMember.get(memberId) || 0) + cents);
+      });
     });
 
+    const baseShareCents = activeMemberIds.map((memberId: string) => payableByMember.get(memberId) || 0);
+    const tippedShareCents = allocateTipAdjustedCents(baseShareCents, tipPercentage);
+    const currentMemberIndex = activeMemberIds.indexOf(currentMemberId);
+    const myPayableSubtotalCents = currentMemberIndex >= 0 ? baseShareCents[currentMemberIndex] : 0;
+    const myTippedShareCents = currentMemberIndex >= 0 ? tippedShareCents[currentMemberIndex] : 0;
+    const itemSubtotal = myItemSubtotalCents / 100;
+    const mySubtotal = myPayableSubtotalCents / 100;
     const tipMultiplier = 1 + (tipPercentage || 0) / 100;
-    const myShareWithTip = mySubtotal * tipMultiplier;
 
     return {
-      myShare: myShareWithTip,
+      myShare: myTippedShareCents / 100,
       subtotal: mySubtotal,
-      totalSubtotal,
-      grandTotal: totalSubtotal * tipMultiplier,
+      itemSubtotal,
+      receiptAdjustment: (myPayableSubtotalCents - myItemSubtotalCents) / 100,
+      totalSubtotal: totalItemCents / 100,
+      grandTotal: Math.round(toCents(payableTotal) * tipMultiplier) / 100,
       itemsCount: validItems.length,
     };
   }, [session, validItems, currentMemberId, tipPercentage]);
@@ -560,6 +587,9 @@ function SessionWorkspaceInner() {
   const hostMember = validMembers.find((m: any) => m?.isHost) || validMembers[0];
   const isCurrentUserHost = Boolean(currentMember?.isHost);
   const isSessionClosed = session?.status === 'settled';
+  const hasSettledMembers = validMembers.some((member: any) => member?.settled === true);
+  const isCurrentMemberSettled = Boolean(currentMember?.settled);
+  const isAccountingLocked = isSessionClosed || hasSettledMembers;
 
   const activePayerId = session?.payerId || 'each';
   const isEachPaid = activePayerId === 'each';
@@ -644,7 +674,9 @@ function SessionWorkspaceInner() {
         isOpen={showQrModal}
         onClose={() => setShowQrModal(false)}
         sessionCode={session.code || ''}
-        sessionId={session.id || ''}
+        sessionId={session.groupId || session.id || ''}
+        isGroup={Boolean(session.groupId)}
+        hideCode={Boolean(session.groupId)}
       />
 
       {/* Real-Time Members List - Compact & Classic Design */}
@@ -732,7 +764,7 @@ function SessionWorkspaceInner() {
           <select
             value={activePayerId}
             onChange={(e) => sendAction('SET_PAYER', { payerId: e.target.value })}
-            disabled={isSessionClosed}
+            disabled={!isCurrentUserHost || isAccountingLocked}
             className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-white shadow-xs focus:ring-2 focus:ring-purple-500/20 cursor-pointer max-w-[220px] truncate"
           >
             <option value="each">👥 {t('eachPaidShareOption', undefined, 'Each paid their share')}</option>
@@ -753,11 +785,21 @@ function SessionWorkspaceInner() {
             {t('sessionClosedNotice', undefined, 'This session is settled and is now read-only.')}
           </div>
         )}
-        {session?.reconciliation?.status === 'mismatch' && (
+        {!isSessionClosed && hasSettledMembers && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
+            {t('paymentAllocationLocked', undefined, 'Items, payer and tip are locked while a member is marked paid. That member can reopen their share before further edits.')}
+          </div>
+        )}
+        {session?.reconciliation?.needsReview && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
             <p className="font-extrabold">{t('receiptNeedsReviewTitle', undefined, 'Please review the scanned prices')}</p>
             <p className="mt-1 text-[11px] opacity-80">
-              {t('receiptNeedsReviewText', undefined, `The scanned items total ${session.reconciliation.calculatedTotal?.toFixed?.(2) || session.reconciliation.itemTotal?.toFixed?.(2)}, while the receipt shows ${session.reconciliation.receiptTotal?.toFixed?.(2)}. Edit any OCR mistakes before splitting.`)}
+              {session.reconciliation.receiptTotal == null
+                ? t('receiptNeedsReviewMissingTotal', undefined, 'The printed receipt total could not be verified. Review the scanned items before splitting.')
+                : t('receiptNeedsReviewMismatch', {
+                    itemsTotal: session.reconciliation.calculatedTotal?.toFixed?.(2) || session.reconciliation.itemTotal?.toFixed?.(2),
+                    receiptTotal: session.reconciliation.receiptTotal?.toFixed?.(2),
+                  }, `The scanned items total ${session.reconciliation.calculatedTotal?.toFixed?.(2) || session.reconciliation.itemTotal?.toFixed?.(2)}, while the receipt shows ${session.reconciliation.receiptTotal?.toFixed?.(2)}. Edit any OCR mistakes before splitting.`)}
             </p>
           </div>
         )}
@@ -767,7 +809,7 @@ function SessionWorkspaceInner() {
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('tapItemToClaim', undefined, 'Tap item to claim & split cost')}</p>
           </div>
 
-          {isCurrentUserHost && (
+          {isCurrentUserHost && !hasSettledMembers && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowAddItemModal(true)}
@@ -801,8 +843,8 @@ function SessionWorkspaceInner() {
             return (
               <div
                 key={item?.id}
-                onClick={isSessionClosed ? undefined : () => sendAction('TOGGLE_CLAIM', { itemId: item?.id, memberId: currentMemberId })}
-                className={`relative p-5 transition-all flex flex-col ${isSessionClosed ? '' : 'cursor-pointer'} ${
+                onClick={isAccountingLocked ? undefined : () => sendAction('TOGGLE_CLAIM', { itemId: item?.id, memberId: currentMemberId, claimed: !isClaimedByMe })}
+                className={`relative p-5 transition-all flex flex-col ${isAccountingLocked ? '' : 'cursor-pointer'} ${
                   isClaimedByMe
                     ? 'bg-emerald-50/30 dark:bg-emerald-950/10'
                     : 'hover:bg-slate-50/50 dark:hover:bg-white/[0.01]'
@@ -827,7 +869,7 @@ function SessionWorkspaceInner() {
                         </h3>
 
                         {/* Edit Item Pencil Button */}
-                        {isCurrentUserHost && (
+                        {isCurrentUserHost && !hasSettledMembers && (
                           <button
                             type="button"
                             onClick={(e) => handleOpenEditModal(item, e)}
@@ -918,7 +960,7 @@ function SessionWorkspaceInner() {
       </div>
 
       {/* Floating Add Item Button */}
-      {isCurrentUserHost && !isSessionClosed && <button
+      {isCurrentUserHost && !isAccountingLocked && <button
         onClick={() => setShowAddItemModal(true)}
         aria-label={t('addItemBtn', undefined, 'Add Item')}
         className="fixed bottom-24 ltr:right-6 rtl:left-6 z-30 w-14 h-14 rounded-full bg-slate-900 dark:bg-emerald-600 text-white font-extrabold shadow-float flex items-center justify-center hover:scale-105 transition-all active:scale-95"
@@ -949,10 +991,18 @@ function SessionWorkspaceInner() {
         </div>
 
         <button
-          onClick={() => setShowSettleModal(true)}
+          onClick={() => {
+            if (isCurrentMemberSettled && !isCurrentUserHost) {
+              void sendAction('TOGGLE_SETTLED', { memberId: currentMemberId, settled: false });
+              return;
+            }
+            setShowSettleModal(true);
+          }}
           className="py-3.5 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold shadow-lg shadow-slate-900/20 text-sm transition-all active:scale-95"
         >
-          {t('settleAndPayBtn', undefined, 'Settle & Pay')}
+          {isCurrentMemberSettled && !isCurrentUserHost
+            ? t('reopenMyShareBtn', undefined, 'Reopen My Share')
+            : t('settleAndPayBtn', undefined, 'Settle & Pay')}
         </button>
       </div>}
 
@@ -1117,13 +1167,17 @@ function SessionWorkspaceInner() {
       {/* --- MODAL 4: SETTLE BREAKDOWN --- */}
       {showSettleModal && (() => {
         type DualRes = { primary: string; secondary?: string };
+        const rawItemSub = typeof memberCalculations.itemSubtotal === 'number' ? memberCalculations.itemSubtotal : parseFloat(memberCalculations.itemSubtotal as any) || 0;
+        const itemSubVal = Math.round((rawItemSub + Number.EPSILON) * 100) / 100;
         const rawSub = typeof memberCalculations.subtotal === 'number' ? memberCalculations.subtotal : parseFloat(memberCalculations.subtotal as any) || 0;
         const subVal = Math.round((rawSub + Number.EPSILON) * 100) / 100;
-        const tipVal = Math.round(((subVal * tipPercentage) / 100 + Number.EPSILON) * 100) / 100;
-        const dueVal = Math.round(((subVal + tipVal) + Number.EPSILON) * 100) / 100;
+        const adjustmentVal = Math.round(((memberCalculations.receiptAdjustment || 0) + Number.EPSILON) * 100) / 100;
+        const dueVal = Math.round(((memberCalculations.myShare || 0) + Number.EPSILON) * 100) / 100;
+        const tipVal = Math.round(((dueVal - subVal) + Number.EPSILON) * 100) / 100;
         const finalDueVal = isRounded ? Math.round(dueVal) : dueVal;
 
-        const subDual: DualRes = formatDual ? formatDual(subVal, session.currency || 'NIS') : { primary: `${subVal.toFixed(2)} ${session.currency || 'NIS'}` };
+        const subDual: DualRes = formatDual ? formatDual(itemSubVal, session.currency || 'NIS') : { primary: `${itemSubVal.toFixed(2)} ${session.currency || 'NIS'}` };
+        const adjustmentDual: DualRes = formatDual ? formatDual(adjustmentVal, session.currency || 'NIS') : { primary: `${adjustmentVal.toFixed(2)} ${session.currency || 'NIS'}` };
         const tipDual: DualRes = formatDual ? formatDual(tipVal, session.currency || 'NIS') : { primary: `${tipVal.toFixed(2)} ${session.currency || 'NIS'}` };
         const dueDual: DualRes = formatDual ? formatDual(finalDueVal, session.currency || 'NIS') : { primary: `${finalDueVal.toFixed(2)} ${session.currency || 'NIS'}` };
 
@@ -1149,7 +1203,7 @@ function SessionWorkspaceInner() {
               </div>
 
               {/* Tip Selector */}
-              <div className="space-y-2">
+              {isCurrentUserHost && !hasSettledMembers && <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block">
                   {t('selectTipLabel', undefined, 'Select Tip Percentage')}
                 </label>
@@ -1194,7 +1248,7 @@ function SessionWorkspaceInner() {
                     <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-slate-400 pointer-events-none">%</span>
                   </div>
                 </div>
-              </div>
+              </div>}
 
               {/* Breakdown summary */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2 text-xs">
@@ -1204,6 +1258,12 @@ function SessionWorkspaceInner() {
                     {subDual.primary} {subDual.secondary || ''}
                   </span>
                 </div>
+                {adjustmentVal !== 0 && (
+                  <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                    <span>{t('receiptAdjustmentLabel', undefined, 'Receipt tax / service / discount')}</span>
+                    <span>{adjustmentDual.primary} {adjustmentDual.secondary || ''}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-500 dark:text-slate-400">
                   <span>{t('tipAmountLabel', { pct: tipPercentage }, `Tip (${tipPercentage}%)`)}</span>
                   <span>
@@ -1323,11 +1383,14 @@ function SessionWorkspaceInner() {
               <div className="pt-2">
                 <button
                   onClick={async () => {
-                    const success = await sendAction('SETTLE_ALL', {});
+                    const success = isCurrentUserHost
+                      ? await sendAction('SETTLE_ALL', {})
+                      : await sendAction('TOGGLE_SETTLED', { memberId: currentMemberId, settled: true });
                     if (!success) return;
 
-                    // Immediately record into local history for instant display in History page
-                    try {
+                    // Only a host closure is canonical history. A member who
+                    // marks their share paid stays in the live room.
+                    if (isCurrentUserHost) try {
                       const userKey = (profile?.displayName || '').trim().toLowerCase();
                       const existingLocal = localStorage.getItem(`billsplit_history_${userKey}`);
                       const localList = existingLocal ? JSON.parse(existingLocal) : [];
@@ -1352,8 +1415,10 @@ function SessionWorkspaceInner() {
 
                     triggerCelebration();
                     setShowSettleModal(false);
-                    localStorage.removeItem('billsplit_active_session');
-                    setTimeout(() => router.push('/?tab=history'), 1200);
+                    if (isCurrentUserHost) {
+                      localStorage.removeItem('billsplit_active_session');
+                      setTimeout(() => router.push('/?tab=history'), 1200);
+                    }
                   }}
                   className="w-full py-4 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-extrabold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
                 >

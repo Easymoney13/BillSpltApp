@@ -39,11 +39,12 @@ import { OCRProgressOverlay } from '../components/OCRProgressOverlay';
 import { SwipeableCard } from '../components/SwipeableCard';
 import { ManualBillModal } from '../components/ManualBillModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
-import { compressReceiptImage, compressAvatarImage } from '../../lib/imageUtils';
-import { scanBillImageInBrowser, scanBillImageRawText } from '../../lib/ocrScanner';
+import { compressAvatarImage } from '../../lib/imageUtils';
+import { createReceiptDraft, receiptConfirmationPayload } from '../../lib/receiptScanClient';
 import { getCookie, setCookie } from '../../lib/cookies';
 import { triggerHaptic } from '../../lib/haptics';
 import { clearRoomCredentials, roomHeaders, saveRoomCredentials } from '../../lib/roomTokens';
+import { fetchPaginatedAccountData } from '../../lib/accountClient';
 
 const PASTEL_COLORS = [
   { bg: 'bg-red-100 dark:bg-red-950/60', text: 'text-red-700 dark:text-red-300' },
@@ -92,6 +93,9 @@ export default function HomePage() {
   const [universalJoinCode, setUniversalJoinCode] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [pendingReceiptDraft, setPendingReceiptDraft] = useState<any>(null);
+  const [pendingScanId, setPendingScanId] = useState('');
+  const [pendingRecoveryToken, setPendingRecoveryToken] = useState('');
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [selectedGroupForModal, setSelectedGroupForModal] = useState<any | null>(null);
   const [groupModalTab, setGroupModalTab] = useState<'options' | 'details'>('options');
@@ -163,7 +167,7 @@ export default function HomePage() {
     if (lastSession) {
       try {
         const parsed = JSON.parse(lastSession);
-        fetch(`/api/session/${parsed.id}`)
+        fetch(`/api/session/${parsed.id}`, { headers: roomHeaders('session', parsed.id, false) })
           .then((res) => res.json())
           .then((data) => {
             if (data && data.session && data.session.status !== 'settled' && !data.session.groupId) {
@@ -202,13 +206,12 @@ export default function HomePage() {
     }).toString();
 
     // Fetch user-specific active groups from server
-    fetch(`/api/user/groups?${queryParams}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.groups) {
+    fetchPaginatedAccountData('/api/user/groups', queryParams, 'groups')
+      .then((groups) => {
+        if (groups) {
           const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
           const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
-          const filtered = data.groups.filter((g: any) => !deletedIds.includes(g.id));
+          const filtered = groups.filter((g: any) => !deletedIds.includes(g.id));
           setUserGroups(filtered);
           localStorage.setItem(userGroupsKey, JSON.stringify(filtered));
         }
@@ -217,13 +220,18 @@ export default function HomePage() {
 
 
     // Fetch user-specific history from server
-    fetch(`/api/history?${queryParams}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data.history)) {
+    fetchPaginatedAccountData('/api/history', queryParams, 'history')
+      .then((history) => {
+        if (Array.isArray(history)) {
           const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
           const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
-          const filtered = data.history.filter((item: any) => !deletedIds.includes(item.id));
+          const filtered = history
+            .filter((item: any) => !deletedIds.includes(item.id))
+            .sort((first: any, second: any) => {
+              const firstTime = Number(first.settledAt || first.createdAt || (first.date ? new Date(first.date).getTime() : 0));
+              const secondTime = Number(second.settledAt || second.createdAt || (second.date ? new Date(second.date).getTime() : 0));
+              return secondTime - firstTime || String(first.id || '').localeCompare(String(second.id || ''));
+            });
           setHistoryList(filtered);
           localStorage.setItem(`billsplit_history_${userKey}`, JSON.stringify(filtered));
         }
@@ -306,7 +314,7 @@ export default function HomePage() {
   const handleUniversalJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     const code = universalJoinCode.trim();
-    if (!code || code.length < 4) return;
+    if (!/^\d{8}$/.test(code)) return;
 
     setIsUploading(true);
     try {
@@ -351,24 +359,16 @@ export default function HomePage() {
     }
 
     triggerHaptic('warning');
-    alert(t('codeNotFound', undefined, 'Code not found. Please check the 4-digit code.'));
+    alert(t('codeNotFound', undefined, 'Code not found. Please check the 8-digit code.'));
   };
 
   const handleScanComplete = (scanResult: any) => {
     setShowCamera(false);
-    if (scanResult.sessionId) {
-      saveRoomCredentials('session', scanResult.sessionId, scanResult.memberId || scanResult.hostId, scanResult.accessToken);
-      localStorage.setItem(
-        'billsplit_active_session',
-        JSON.stringify({
-          id: scanResult.sessionId,
-          code: scanResult.code,
-          storeName: scanResult.session?.storeName || 'New Split',
-          isHost: true,
-          hostId: scanResult.hostId
-        })
-      );
-      router.push(`/session/${scanResult.sessionId}`);
+    if (scanResult.receipt?.items?.length) {
+      setPendingReceiptDraft(scanResult.receipt);
+      setPendingScanId(scanResult.scanId || '');
+      setPendingRecoveryToken(scanResult.recoveryToken || '');
+      setShowManualModal(true);
     }
   };
 
@@ -378,94 +378,36 @@ export default function HomePage() {
 
     setIsUploading(true);
     try {
-      const compressedBase64 = await compressReceiptImage(file);
-      let data: any = { success: false };
-
-      // 1. Primary (Option 3): Extract raw text locally via Tesseract and parse it via server Gemini
-      console.log('⚡ Running client-side Tesseract raw text scan...');
-      const rawText = await scanBillImageRawText(compressedBase64);
-
-      if (rawText && rawText.trim().length > 0) {
-        console.log('⚡ Raw text extracted locally, sending to server for Gemini parsing...');
-        const res = await fetch('/api/receipt/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rawText,
-            hostName: profile.displayName || 'Host'
-          })
-        });
-        data = await res.json();
-      }
-
-      // 2. Fallback: If local Tesseract raw scan failed or returned no session, fall back to server image scanning
-      if (!data.success || !data.sessionId) {
-        console.log('⚠️ Raw text parser failed or was skipped. Trying server-side image vision OCR...');
-        const res = await fetch('/api/receipt/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: compressedBase64,
-            mimeType: 'image/jpeg',
-            hostName: profile.displayName || 'Host'
-          })
-        });
-        data = await res.json();
-      }
-
-      // 3. Fallback: If both server parses failed, try local browser Tesseract OCR parser
-      if (!data.success || !data.sessionId) {
-        console.log('⚠️ Server OCR failed. Running browser Tesseract OCR fallback parser...');
-        const clientParsed = await scanBillImageInBrowser(compressedBase64);
-        if (clientParsed && clientParsed.items && clientParsed.items.length > 0) {
-          const res = await fetch('/api/receipt/scan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              parsedBill: clientParsed,
-              hostName: profile.displayName || 'Host'
-            })
-          });
-          data = await res.json();
-        }
-      }
-      if (data.success && data.sessionId) {
-        saveRoomCredentials('session', data.sessionId, data.memberId || data.hostId, data.accessToken);
-        localStorage.setItem(
-          'billsplit_active_session',
-          JSON.stringify({
-            id: data.sessionId,
-            code: data.code,
-            storeName: data.session?.storeName || 'Uploaded Bill',
-            isHost: true,
-            hostId: data.hostId
-          })
-        );
-        router.push(`/session/${data.sessionId}`);
-      } else {
-        const errorMsg = data.isNotBill
-          ? "⚠️ Invalid Photo: Image is not a bill or receipt!\n\nNo receipt items or prices were detected in this image. Please take or upload a clear photo of a physical bill or receipt."
-          : (data.error || t('couldNotParse', undefined, 'Could not parse receipt image. Please try again.'));
-        alert(errorMsg);
-      }
+      const draft = await createReceiptDraft(file, profile.displayName || 'Host');
+      setPendingReceiptDraft({ ...draft.receipt, imageQuality: draft.imageQuality, _previewImages: draft.previewImages });
+      setPendingScanId(draft.scanId);
+      setPendingRecoveryToken(draft.recoveryToken);
+      setShowManualModal(true);
     } catch (err) {
       console.error(err);
-      alert(t('errorUploading', undefined, 'Error uploading receipt image.'));
+      alert(err instanceof Error ? err.message : t('errorUploading', undefined, 'Error uploading receipt image.'));
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleLaunchManualSession = async (billData: { storeName: string; currency: string; items: any[] }) => {
+  const handleLaunchManualSession = async (billData: { storeName: string; date?: string; currency: string; items: any[] }) => {
     try {
       setIsUploading(true);
       const res = await fetch('/api/receipt/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          parsedBill: billData,
-          hostName: profile.displayName || 'Host'
+          parsedBill: {
+            ...billData,
+            ...receiptConfirmationPayload(pendingReceiptDraft),
+          },
+          hostName: profile.displayName || 'Host',
+          scanId: pendingScanId || undefined,
+          recoveryToken: pendingRecoveryToken || undefined,
+          confirmedByUser: true,
+          imageQuality: pendingReceiptDraft?.imageQuality || undefined,
         })
       });
 
@@ -483,6 +425,9 @@ export default function HomePage() {
           })
         );
         setShowManualModal(false);
+        setPendingReceiptDraft(null);
+        setPendingScanId('');
+        setPendingRecoveryToken('');
         router.push(`/session/${data.sessionId}`);
       } else {
         alert(data.error || 'Failed to create manual session.');
@@ -1071,7 +1016,7 @@ export default function HomePage() {
                                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3 inline">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                                       </svg>
-                                      <span>{item.groupName || 'Group'}</span>
+                                      <span>{item.groupName || t('groupFallbackLabel', {}, 'Group')}</span>
                                     </span>
                                   )}
                                 </p>
@@ -1399,8 +1344,14 @@ export default function HomePage() {
       {/* Manual Bill Creation Modal */}
       <ManualBillModal
         isOpen={showManualModal}
-        onClose={() => setShowManualModal(false)}
+        onClose={() => {
+          setShowManualModal(false);
+          setPendingReceiptDraft(null);
+          setPendingScanId('');
+          setPendingRecoveryToken('');
+        }}
         onLaunchSession={handleLaunchManualSession}
+        initialData={pendingReceiptDraft}
       />
 
       {/* Create Group Modal */}
@@ -1473,6 +1424,9 @@ export default function HomePage() {
               <button
                 onClick={() => {
                   setShowStartSplitModal(false);
+                  setPendingReceiptDraft(null);
+                  setPendingScanId('');
+                  setPendingRecoveryToken('');
                   setShowManualModal(true);
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
@@ -1523,8 +1477,8 @@ export default function HomePage() {
             >
               <input
                 type="text"
-                maxLength={4}
-                placeholder={t('enterUniversalCodePlaceholder', undefined, 'Enter 4-digit code (e.g. 8492)')}
+                maxLength={8}
+                placeholder={t('enterUniversalCodePlaceholder', undefined, 'Enter 8-digit code')}
                 value={universalJoinCode}
                 onChange={(e) => setUniversalJoinCode(e.target.value.replace(/\D/g, ''))}
                 className="w-full py-2 px-3.5 rounded-xl photo-input text-center text-sm font-mono tracking-wider font-extrabold text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-sans placeholder:text-xs placeholder:tracking-normal"
@@ -1532,7 +1486,7 @@ export default function HomePage() {
 
               <button
                 type="submit"
-                disabled={universalJoinCode.length < 4}
+                disabled={!/^\d{8}$/.test(universalJoinCode)}
                 className="w-full py-3 px-4 photo-btn-indigo text-xs flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
                 <span>{t('joinSessionBtn', undefined, 'Join')}</span>

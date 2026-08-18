@@ -17,16 +17,53 @@ export interface ParsedBill {
  * Ultra-Precision Receipt OCR Parser supporting English & Hebrew Receipts
  */
 export async function scanBillImageInBrowser(imageSrc: string): Promise<ParsedBill | null> {
-  let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
-  try {
-    worker = await createWorker(['eng', 'heb']);
+  return scanBillImagesInBrowser([imageSrc]);
+}
 
-    const ret = await worker.recognize(imageSrc);
-    return parseReceiptText(ret.data.text);
+export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs = 12_000): Promise<ParsedBill | null> {
+  let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+  const deadline = Date.now() + Math.max(1_000, timeoutMs);
+  try {
+    const workerPromise = createWorker(['eng', 'heb']);
+    const initializationTimeout = new Promise<null>((resolve) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        resolve(null);
+      }, Math.max(1, deadline - Date.now()));
+    });
+    worker = await Promise.race([workerPromise, initializationTimeout]);
+    if (timeout) clearTimeout(timeout);
+    timeout = null;
+    if (!worker) {
+      void workerPromise.then((lateWorker) => lateWorker.terminate()).catch(() => {});
+      return null;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return null;
+    timeout = setTimeout(() => {
+      timedOut = true;
+      void worker?.terminate().catch(() => {});
+    }, remaining);
+    const parsedParts: ParsedBill[] = [];
+    for (const imageSource of imageSources.slice(0, 6)) {
+      if (timedOut || Date.now() >= deadline) return null;
+      const ret = await worker.recognize(imageSource);
+      const parsed = parseReceiptText(ret.data.text);
+      if (parsed?.items?.length) parsedParts.push(parsed);
+    }
+    if (parsedParts.length === 0) return null;
+    return {
+      ...parsedParts[0],
+      items: parsedParts.flatMap((part) => part.items).slice(0, 250),
+    };
   } catch (err) {
+    if (timedOut) return null;
     console.warn('Browser Tesseract OCR failed:', err);
     return null;
   } finally {
+    if (timeout) clearTimeout(timeout);
     if (worker) await worker.terminate().catch(() => {});
   }
 }
@@ -47,39 +84,18 @@ export async function scanBillImageRawText(imageSrc: string): Promise<string | n
 
 function isTotalOrTaxLine(name: string): boolean {
   if (typeof name !== 'string') return false;
-  const raw = name.toLowerCase().trim();
-  const clean = raw.replace(/[\s'"“״”`׳.\-–—:;=_\/\\]+/g, '');
-  
-  const totalKeywords = [
-    'total', 'subtotal', 'sub-total', 'grandtotal', 'balance', 'balancedue',
-    'amountdue', 'totaldue', 'finaltotal', 'billtotal', 'checktotal', 'nettotal',
-    'tax', 'vat', 'salestax', 'servicecharge', 'gratuity',
-    'discount', 'coupon', 'credit',
-    'cash', 'visa', 'mastercard', 'amex', 'creditcard', 'debitcard',
-    'changedue', 'amountpaid', 'tendered',
-    'לתשלום', 'סהכ', 'סחכ', 'סךהכל', 'סכהכל', 'סחיכ', 'סהיק', 'סהכחשבון', 'סכהכחשבון', 'סךהכלחשבון',
-    'סכוםכולל', 'סךהכול', 'סךהכוללתשלום', 'סכוםלתשלום', 'סךלתשלום', 'חשבוןלתשלום', 'חשבוןסופי',
-    'סהכבשח', 'סהכמחיר', 'סהכסופי', 'סהכלתשלום',
-    'מעמ', 'דמישירות',
-    'הנחה', 'זיכוי', 'שובר', 'קופון',
-    'מזומן', 'כרטיסאשראי', 'אשראי', 'עודף', 'סכוםששולם',
-    'חשבוןמס', 'חשבוניתמס'
-  ];
-  
-  if (totalKeywords.some(keyword => clean.includes(keyword))) {
-    return true;
-  }
-
-  const totalRegexes = [
-    /\b(total|sub-?total|grand\s*total|amount\s*due|balance\s*due|final\s*total)\b/i,
-    /\b(tax|vat|service\s*charge|gratuity)\b/i,
-    /\b(cash\s*paid|change\s*due|visa|mastercard|amex|credit\s*card)\b/i,
-    /(סה["״׳'`]?כ|סך\s*ה?כ[וֹ]?ל|ס[הח]כ)\s*(חשבון|לתשלום|סופי|כולל|בש["״]?ח)?/i,
-    /(לתשלום|סכום\s*לתשלום|סך\s*לתשלום|חשבון\s*לתשלום)/i,
-    /(מע["״׳'`]?מ|דמי\s*שירות|הנחה|זיכוי)/i,
-  ];
-
-  return totalRegexes.some(regex => regex.test(raw));
+  const clean = name
+    .toLowerCase()
+    .replace(/["“״”`׳]/g, '')
+    .replace(/[\-–—:;=_\/\\]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const rate = '\\d+(?:[.,]\\d+)?\\s*%?';
+  const englishLabel = '(?:total|subtotal|grand total|balance due|amount due|total due|final total|bill total|check total|net total|tax|vat|sales tax|discount(?: coupon| member| club| loyalty| promotion)?|(?:member|club|loyalty|coupon|promo(?:tional)?) discount|coupon|credit|service(?: charge| fee)?|tip(?: amount)?|gratuity|cash|cash paid|change due|amount paid|tendered|visa|mastercard|amex|credit card|debit card)';
+  const hebrewLabel = '(?:לתשלום|סהכ|סחכ|סך הכל|סכהכל|סחיכ|סהיק|סהכ חשבון|סכ הכל חשבון|סך הכל חשבון|סכום כולל|סך הכול|סך הכול לתשלום|סכום לתשלום|סך לתשלום|חשבון לתשלום|חשבון סופי|סהכ בשח|סהכ מחיר|סהכ סופי|סהכ לתשלום|מעמ|שירות|דמי שירות|טיפ|תשר|הנחה|הנחת (?:מועדון|חבר|קופון|מבצע)|זיכוי|שובר|קופון(?: הנחה)?|מבצע|מזומן|כרטיס אשראי|אשראי|עודף|סכום ששולם|חשבון מס|חשבונית מס)';
+  const english = new RegExp(`^(?:${englishLabel}(?:\\s+${rate})?|${rate}\\s+${englishLabel})$`);
+  const hebrew = new RegExp(`^(?:${hebrewLabel}(?:\\s+${rate})?|${rate}\\s+${hebrewLabel})$`);
+  return english.test(clean) || hebrew.test(clean);
 }
 
 
@@ -160,9 +176,37 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
 
     // First try decimal price pattern (e.g. 45.00 or 12.50)
     const decimalMatches = [...line.matchAll(/\b(\d+[.,]\d{1,2})\b/g)];
-    const decimalMatch = decimalMatches.at(-1);
+    const numericValues = [...line.matchAll(/\b(\d+(?:[.,]\d{1,2})?)\b/g)].map((match) => ({
+      value: Number(match[1].replace(',', '.')),
+      text: match[0],
+      index: match.index || 0,
+    }));
+    let decimalMatch = decimalMatches.at(-1);
+    if (decimalMatches.length > 1) {
+      const decimalCandidates = decimalMatches.map((match) => ({
+        match,
+        value: Number(match[1].replace(',', '.')),
+      }));
+      const inferredLineTotal = decimalCandidates.find((candidate) => numericValues.some((quantity) => (
+        Number.isInteger(quantity.value)
+        && quantity.value >= 2
+        && quantity.value <= 100
+        && numericValues.some((unit) => (
+          unit.index !== quantity.index
+          && Math.abs(candidate.value - unit.value * quantity.value) <= 0.02
+        ))
+      )));
+      if (inferredLineTotal) decimalMatch = inferredLineTotal.match;
+    }
     if (decimalMatch) {
       priceVal = parseFloat(decimalMatch[1].replace(',', '.'));
+      const priceStart = decimalMatch.index || 0;
+      const labelBeforePrice = `${line.slice(0, priceStart)} ${line.slice(priceStart + decimalMatch[0].length)}`
+        .replace(/[£$₪€]/g, ' ')
+        .replace(/[-_+=|\\/#]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (isTotalOrTaxLine(labelBeforePrice)) continue;
       // Remove all numbers, punctuation, and isolate item name
       const nameCleaned = line.replace(/\b\d+(?:[.,]\d{1,2})?\b/g, '').replace(/[-_+=|\\/#]/g, ' ').trim();
       if (nameCleaned.length >= 2 && !noiseRegex.test(nameCleaned)) {

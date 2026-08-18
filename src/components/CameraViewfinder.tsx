@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Upload, Flashlight, RefreshCw, X } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
-import { scanBillImageInBrowser, scanBillImageRawText } from '../../lib/ocrScanner';
-import { compressReceiptImage } from '../../lib/imageUtils';
+import { createReceiptDraft } from '../../lib/receiptScanClient';
 
 interface CameraViewfinderProps {
   onScanComplete: (receiptData: any) => void;
@@ -115,69 +114,20 @@ export const CameraViewfinder: React.FC<CameraViewfinderProps> = ({
     if (!imageToScan) return;
     setIsScanning(true);
     try {
-      const compressed = await compressReceiptImage(imageToScan);
-      const receiptEndpoint = parseOnly ? '/api/receipt/parse' : '/api/receipt/scan';
-      let data: any = { success: false };
-
-      // 1. Primary (Option 3): Extract raw text locally via Tesseract and parse it via server Gemini
-      console.log('⚡ Running client-side Tesseract raw text scan...');
-      const rawText = await scanBillImageRawText(compressed);
-
-      if (rawText && rawText.trim().length > 0) {
-        console.log('⚡ Raw text extracted locally, sending to server for Gemini parsing...');
-        const res = await fetch(receiptEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rawText,
-            hostName
-          })
-        });
-        data = await res.json();
-      }
-
-      // 2. Fallback: If local Tesseract raw scan failed or returned no session/receipt, fall back to server image scanning
-      if (!data.success || (!data.sessionId && !data.receipt)) {
-        console.log('⚠️ Raw text parser failed or was skipped. Trying server-side image vision OCR...');
-        const res = await fetch(receiptEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: compressed,
-            mimeType: 'image/jpeg',
-            hostName
-          })
-        });
-        data = await res.json();
-      }
-
-      // 3. Fallback: If both server parses failed, try local browser Tesseract OCR parser
-      if (!data.success || (!data.sessionId && !data.receipt)) {
-        console.log('⚠️ Server OCR failed. Running browser Tesseract OCR fallback parser...');
-        const clientParsed = await scanBillImageInBrowser(compressed);
-        if (clientParsed && clientParsed.items && clientParsed.items.length > 0) {
-          const res = await fetch(receiptEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              parsedBill: clientParsed,
-              hostName
-            })
-          });
-          data = await res.json();
-        }
-      }
-      if (data.success) {
-        onScanComplete(data);
-      } else {
-        const errorMsg = data.isNotBill
-          ? "⚠️ Invalid Photo: Image is not a bill or receipt!\n\nNo receipt items or prices were detected in this image. Please take or upload a clear photo of a physical bill or receipt."
-          : (data.error || t('couldNotParse', undefined, 'Could not parse receipt image. Please try again.'));
-        alert(errorMsg);
-      }
+      const draft = await createReceiptDraft(imageToScan, hostName);
+      onScanComplete({
+        success: true,
+        receipt: { ...draft.receipt, imageQuality: draft.imageQuality, _previewImages: draft.previewImages },
+        scanId: draft.scanId,
+        recoveryToken: draft.recoveryToken,
+        confirmationRequired: true,
+        usedLocalFallback: draft.usedLocalFallback,
+      });
     } catch (err) {
       console.error(err);
-      alert(t('errorUploading', undefined, 'Network error while scanning receipt.'));
+      alert(err instanceof Error
+        ? err.message
+        : t('errorUploading', undefined, 'Network error while scanning receipt.'));
     } finally {
       setIsScanning(false);
     }

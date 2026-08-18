@@ -20,8 +20,8 @@ export const translations: Record<string, Record<string, string>> = {
     parsing: "Parsing OCR...",
     scanCamera: "Scan Camera",
     manualBtn: "Manual",
-    joinViaCode: "Join via 4-Digit Code",
-    enterCodePlaceholder: "Enter 4-digit code (e.g. 8492)",
+    joinViaCode: "Join via 8-Digit Code",
+    enterCodePlaceholder: "Enter 8-digit code",
     joinSessionBtn: "Join Session",
     startSplitBtn: "Start Split",
     joinSessionBtnAction: "Join Session",
@@ -47,11 +47,12 @@ export const translations: Record<string, Record<string, string>> = {
     // Groups Section
     yourActiveGroups: "Your Active Groups ({n})",
     groupsTitle: "Groups",
+    groupFallbackLabel: "Group",
     createGroupBtn: "Create Group",
     groupsSub: "Create a group to split shared bills and minimize debts with friends.",
     noGroupsYetHint: "💡 Create a group above to start a shared expense tracker with friends!",
     joinGroupBtn: "Join Group",
-    enterGroupCodePlaceholder: "Enter Group Code (e.g. 8492)",
+    enterGroupCodePlaceholder: "Enter 8-digit group code",
     tripExpenseTracker: "Group Expense Tracker",
     addBillsToGroup: "Add Bills to {groupName}",
     groupHeroSub: "Upload scans or manual bills anytime. Balances update & minimize automatically!",
@@ -69,7 +70,7 @@ export const translations: Record<string, Record<string, string>> = {
     attachBillTitle: "Attach Bill to Group",
     attachBillSub: "Add this bill to a trip or roommate group",
     selectGroupLabel: "Select Your Group",
-    enterGroupCodeLabel: "Enter 4-Digit Group Code",
+    enterGroupCodeLabel: "Enter 8-Digit Group Code",
     attachBtn: "Attach Bill 🔗",
 
     // History Tab
@@ -151,7 +152,7 @@ export const translations: Record<string, Record<string, string>> = {
     // QR Code Modal
     scanToJoinTitle: "Scan to Join Room",
     friendsScanSub: "Friends scan with their camera to join",
-    fourDigitSessionCodeLabel: "4-Digit Session Code",
+    fourDigitSessionCodeLabel: "8-Digit Session Code",
     copyLinkBtn: "Copy Link",
     copiedLinkMsg: "Copied Link!",
     shareLinkBtn: "Share Link",
@@ -216,9 +217,27 @@ export const translations: Record<string, Record<string, string>> = {
     ocrStage2: "Reading items and prices...",
     ocrStage3: "Checking receipt totals...",
     ocrPoweredBy: "Powered by Real-Time Browser & AI OCR",
+    receiptReviewTitle: "Compare every row with the receipt before confirming",
+    receiptItemsShown: "Items shown: {amount}",
+    receiptPrintedTotal: "Printed total: {amount}",
+    receiptPrintedUnverified: "Printed total was not verified",
+    receiptReviewFlags: "Review flags: {flags}",
+    receiptAdjustedPolicy: "Printed tax, service, or discount is spread proportionally across claimed items. Edit item prices to net amounts if the adjustment belongs to specific rows.",
+    receiptSourceAlt: "Receipt source {index}",
+    confirmReceiptContinue: "Confirm receipt & continue",
+    receiptEditedMismatchWarning: "Your edits no longer match the printed total. Review the changed rows, then click confirm once more to acknowledge the mismatch.",
+    receiptEditedMismatchConfirm: "The edited rows still do not match the printed total. Click confirm again only if the receipt image supports these values.",
+    reviewEditedReceiptBtn: "Review changed total",
+    paymentAllocationLocked: "Items, payer and tip are locked while a member is marked paid. That member can reopen their share before further edits.",
+    reopenMyShareBtn: "Reopen My Share",
+    receiptNeedsReviewMissingTotal: "The printed receipt total could not be verified. Review the scanned items before splitting.",
+    receiptNeedsReviewMismatch: "The scanned items total {itemsTotal}, while the receipt shows {receiptTotal}. Edit any OCR mistakes before splitting.",
+    receiptAdjustmentLabel: "Receipt tax / service / discount",
+    secureGroupInviteText: "Join our bill splitting room with this secure link.",
+    secureGroupQrAlt: "QR code for secure group invite",
 
     // Alerts & Messages
-    codeNotFound: "Session code not found. Please check the 4-digit code.",
+    codeNotFound: "Session code not found. Please check the 8-digit code.",
     couldNotParse: "Could not parse receipt image. Please take a clear, well-lit photo or enter items manually.",
     errorUploading: "Error uploading receipt image."
   },
@@ -244,8 +263,8 @@ export const translations: Record<string, Record<string, string>> = {
     parsing: "מפענח OCR...",
     scanCamera: "סרוק במצלמה",
     manualBtn: "ידנית",
-    joinViaCode: "הצטרף באמצעות קוד 4 ספרות",
-    enterCodePlaceholder: "הזן קוד 4 ספרות (למשל 8492)",
+    joinViaCode: "הצטרף באמצעות קוד 8 ספרות",
+    enterCodePlaceholder: "הזן קוד בן 8 ספרות",
     joinSessionBtn: "הצטרף לסשן",
     startSplitBtn: "התחל פיצול",
     joinSessionBtnAction: "הצטרף לסשן",
@@ -271,11 +290,12 @@ export const translations: Record<string, Record<string, string>> = {
     // Groups Section
     yourActiveGroups: "הקבוצות הפעילות שלך ({n})",
     groupsTitle: "קבוצות",
+    groupFallbackLabel: "קבוצה",
     createGroupBtn: "צור קבוצה",
     groupsSub: "צור קבוצה לחלוקת חשבונות וצמצום חובות עם חברים.",
     noGroupsYetHint: "💡 צור קבוצה למעלה כדי להתחיל מעקב הוצאות משותף עם חברים!",
     joinGroupBtn: "הצטרף לקבוצה",
-    enterGroupCodePlaceholder: "הזן קוד קבוצה (למשל 8492)",
+    enterGroupCodePlaceholder: "הזן קוד קבוצה בן 8 ספרות",
     tripExpenseTracker: "מעקב הוצאות קבוצתי",
     addBillsToGroup: "הוספת חשבונות ל{groupName}",
     groupHeroSub: "סרוק קבלות או הזן חשבונות. היתרות מתעדכנות ומצטמצמות אוטומטית!",
@@ -293,7 +313,7 @@ export const translations: Record<string, Record<string, string>> = {
     attachBillTitle: "שייך חשבון לקבוצה",
     attachBillSub: "הוסף חשבון זה לקבוצת טיול או דירה",
     selectGroupLabel: "בחר את הקבוצה שלך",
-    enterGroupCodeLabel: "הזן קוד קבוצה בן 4 ספרות",
+    enterGroupCodeLabel: "הזן קוד קבוצה בן 8 ספרות",
     attachBtn: "שייך חשבון 🔗",
 
     // History Tab
@@ -375,7 +395,7 @@ export const translations: Record<string, Record<string, string>> = {
     // QR Code Modal
     scanToJoinTitle: "סרוק להצטרפות לחדר",
     friendsScanSub: "חברים סורקים במצלמה להצטרפות",
-    fourDigitSessionCodeLabel: "קוד סשן 4 ספרות",
+    fourDigitSessionCodeLabel: "קוד סשן בן 8 ספרות",
     copyLinkBtn: "העתק קישור",
     copiedLinkMsg: "הקישור הועתק!",
     shareLinkBtn: "שתף קישור",
@@ -440,9 +460,27 @@ export const translations: Record<string, Record<string, string>> = {
     ocrStage2: "קורא שורות פריטים ומחירים...",
     ocrStage3: "מאמת ומחשב סיכומי חשבון...",
     ocrPoweredBy: "מופעל באמצעות בינה מלאכותית ו-OCR בזמן אמת",
+    receiptReviewTitle: "יש להשוות כל שורה לקבלה לפני האישור",
+    receiptItemsShown: "סכום הפריטים: {amount}",
+    receiptPrintedTotal: "הסכום המודפס: {amount}",
+    receiptPrintedUnverified: "הסכום המודפס לא אומת",
+    receiptReviewFlags: "סימונים לבדיקה: {flags}",
+    receiptAdjustedPolicy: "מס, דמי שירות או הנחה מודפסים מחולקים באופן יחסי בין הפריטים שסומנו. אם ההתאמה שייכת לפריטים מסוימים, יש לערוך את מחיריהם לסכום נטו.",
+    receiptSourceAlt: "צילום קבלה {index}",
+    confirmReceiptContinue: "אישור הקבלה והמשך",
+    receiptEditedMismatchWarning: "השינויים כבר אינם תואמים לסכום המודפס. יש לבדוק את השורות ששונו ואז ללחוץ שוב כדי לאשר את הפער.",
+    receiptEditedMismatchConfirm: "השורות הערוכות עדיין אינן תואמות לסכום המודפס. יש לאשר שוב רק אם צילום הקבלה תומך בערכים האלה.",
+    reviewEditedReceiptBtn: "בדיקת הסכום ששונה",
+    paymentAllocationLocked: "הפריטים, המשלם והטיפ נעולים כל עוד חבר מסומן כשולם. אותו חבר יכול לפתוח מחדש את החלק שלו לפני עריכות נוספות.",
+    reopenMyShareBtn: "פתיחת החלק שלי מחדש",
+    receiptNeedsReviewMissingTotal: "לא ניתן היה לאמת את הסכום הכולל המודפס. יש לבדוק את הפריטים שנסרקו לפני החלוקה.",
+    receiptNeedsReviewMismatch: "סכום הפריטים שנסרקו הוא {itemsTotal}, בעוד שבקבלה מופיע {receiptTotal}. יש לתקן שגיאות OCR לפני החלוקה.",
+    receiptAdjustmentLabel: "מס, שירות או הנחה מהקבלה",
+    secureGroupInviteText: "הצטרפו לחדר חלוקת החשבון באמצעות הקישור המאובטח הזה.",
+    secureGroupQrAlt: "קוד QR להזמנה מאובטחת לקבוצה",
 
     // Alerts & Messages
-    codeNotFound: "קוד סשן לא נמצא. אנא בדוק את הקוד בן 4 הספרות.",
+    codeNotFound: "קוד סשן לא נמצא. אנא בדוק את הקוד בן 8 הספרות.",
     couldNotParse: "לא ניתן לפענח את הקבלה. אנא צלם תמונה ברורה או הזן פריטים ידנית.",
     errorUploading: "שגיאה בהעלאת תמונת הקבלה."
   }
@@ -565,4 +603,3 @@ export function formatDualPrice(
 }
 
 export default translations;
-

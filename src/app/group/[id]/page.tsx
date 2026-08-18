@@ -33,14 +33,18 @@ import { ManualBillModal } from '../../../components/ManualBillModal';
 import { CameraViewfinder } from '../../../components/CameraViewfinder';
 import { OCRProgressOverlay } from '../../../components/OCRProgressOverlay';
 import { SwipeableCard } from '../../../components/SwipeableCard';
-import { compressReceiptImage } from '../../../../lib/imageUtils';
-import { scanBillImageInBrowser, scanBillImageRawText } from '../../../../lib/ocrScanner';
+import { createReceiptDraft, receiptConfirmationPayload } from '../../../../lib/receiptScanClient';
 import { getCookie, setCookie } from '../../../../lib/cookies';
 import { formatCurrency } from '../../../../lib/i18n';
 import { isValidIsraeliPhone, triggerBitPayment } from '../../../../lib/bitDeepLink';
 
 import { triggerHaptic } from '../../../../lib/haptics';
-import { clearRoomCredentials, getRoomToken, roomHeaders, saveRoomCredentials } from '../../../../lib/roomTokens';
+import { clearRoomCredentials, getRoomMemberId, getRoomToken, roomHeaders, saveRoomCredentials } from '../../../../lib/roomTokens';
+
+function createClientActionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `action_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+}
 
 export default function GroupWorkspacePage() {
   const params = useParams();
@@ -60,6 +64,8 @@ export default function GroupWorkspacePage() {
 
   // Edit Bill State
   const [editingBill, setEditingBill] = useState<any>(null);
+  const [pendingReceiptDraft, setPendingReceiptDraft] = useState<any>(null);
+  const [pendingScanId, setPendingScanId] = useState('');
   const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
   const [swipedBillId, setSwipedBillId] = useState<string | null>(null);
 
@@ -88,14 +94,13 @@ export default function GroupWorkspacePage() {
 
     const initializeGroup = async () => {
       try {
-        const initialRes = await fetch(`/api/groups/${groupId}`);
+        const initialRes = await fetch(`/api/groups/${groupId}`, { headers: roomHeaders('group', groupId, false) });
         const initialData = await initialRes.json();
         if (!initialRes.ok || !initialData.group) throw new Error(initialData.error || 'Group not found');
         const resolvedId = initialData.group.id;
         const existingToken = getRoomToken('group', resolvedId) || getRoomToken('group', groupId);
-        const existingMember = (initialData.group.members || []).find((m: any) => 
-          (m.name && m.name.toLowerCase().trim() === (profile.displayName || '').toLowerCase().trim())
-        );
+        const persistedMemberId = getRoomMemberId('group', resolvedId) || getRoomMemberId('group', groupId);
+        const existingMember = (initialData.group.members || []).find((m: any) => m.id === persistedMemberId);
         if (existingToken && existingMember) {
           saveRoomCredentials('group', resolvedId, existingMember.id, existingToken);
           if (!disposed) {
@@ -155,13 +160,13 @@ export default function GroupWorkspacePage() {
 
   const fetchGroupData = async (id: string) => {
     try {
-      const res = await fetch(`/api/groups/${id}`);
+      const res = await fetch(`/api/groups/${id}`, { headers: roomHeaders('group', id, false) });
       if (res.ok) {
         const data = await res.json();
         if (data.group) {
           setGroup(data.group);
           setFetchError(null);
-          // If URL was a 4-digit code (e.g. 8492), normalize URL to real group.id
+          // Normalize a shared invite code to the durable group id.
           if (data.group.id && data.group.id !== id) {
             router.replace(`/group/${data.group.id}`);
           }
@@ -209,7 +214,7 @@ export default function GroupWorkspacePage() {
     }
   };
 
-  const handleAddBillToGroup = async (billData: { title: string; currency: string; items: any[]; payerId?: string; amount?: number; id?: string }) => {
+  const handleAddBillToGroup = async (billData: { title: string; currency: string; items: any[]; payerId?: string; amount?: number; id?: string; date?: string; receipt?: any; scanId?: string; confirmedByUser?: boolean }) => {
     if (!group) return;
 
     try {
@@ -220,13 +225,17 @@ export default function GroupWorkspacePage() {
         body: JSON.stringify({
           groupId: group.id,
           bill: {
-            id: billData.id || `bill_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+            id: billData.id || (billData.scanId ? undefined : `bill_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`),
+            expectedRevision: editingBill ? Number(editingBill.revision || 0) : undefined,
             title: billData.title,
-            date: new Date().toISOString().split('T')[0],
+            date: billData.date || editingBill?.date || new Date().toISOString().split('T')[0],
             payerId: billData.payerId || currentMemberId,
             currency: billData.currency || group.currency || 'NIS',
             amount: billData.amount || billData.items.reduce((acc, i) => acc + (i.price || 0), 0),
-            items: billData.items
+            items: billData.items,
+            receipt: billData.receipt,
+            scanId: billData.scanId,
+            confirmedByUser: billData.confirmedByUser,
           }
         })
       });
@@ -237,6 +246,8 @@ export default function GroupWorkspacePage() {
         setGroup(data.group);
         setShowCreateBillModal(false);
         setEditingBill(null);
+        setPendingReceiptDraft(null);
+        setPendingScanId('');
 
         // If a new live bill session was created, open the live item-claiming room!
         if (data.sessionId && !billData.id) {
@@ -282,7 +293,7 @@ export default function GroupWorkspacePage() {
       const res = await fetch('/api/groups/bill/action', {
         method: 'POST',
         headers: roomHeaders('group', group.id),
-        body: JSON.stringify({ groupId: group.id, action, payload }),
+        body: JSON.stringify({ groupId: group.id, action, payload, actionId: createClientActionId() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not update bill');
@@ -298,69 +309,14 @@ export default function GroupWorkspacePage() {
 
     setIsUploading(true);
     try {
-      const compressedBase64 = await compressReceiptImage(file);
-      let data: any = { success: false };
-
-      // 1. Primary (Option 3): Extract raw text locally via Tesseract and parse it via server Gemini
-      console.log('⚡ Running client-side Tesseract raw text scan...');
-      const rawText = await scanBillImageRawText(compressedBase64);
-
-      if (rawText && rawText.trim().length > 0) {
-        console.log('⚡ Raw text extracted locally, sending to server for Gemini parsing...');
-        const res = await fetch('/api/receipt/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rawText
-          })
-        });
-        data = await res.json();
-      }
-
-      // 2. Fallback: If local Tesseract raw scan failed or returned no receipt, fall back to server image scanning
-      if (!data.success || !data.receipt) {
-        console.log('⚠️ Raw text parser failed or was skipped. Trying server-side image vision OCR...');
-        const res = await fetch('/api/receipt/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageBase64: compressedBase64,
-            mimeType: 'image/jpeg'
-          })
-        });
-        data = await res.json();
-      }
-
-      // 3. Fallback: If both server parses failed, try local browser Tesseract OCR parser
-      if (!data.success || !data.receipt) {
-        console.log('⚠️ Server OCR failed. Running browser Tesseract OCR fallback parser...');
-        const clientParsed = await scanBillImageInBrowser(compressedBase64);
-        if (clientParsed && clientParsed.items && clientParsed.items.length > 0) {
-          const res = await fetch('/api/receipt/parse', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              parsedBill: clientParsed
-            })
-          });
-          data = await res.json();
-        }
-      }
-      if (data.success && data.receipt) {
-        await handleAddBillToGroup({
-          title: data.receipt.storeName || 'Scanned Receipt',
-          currency: data.receipt.currency || 'NIS',
-          items: data.receipt.items || []
-        });
-      } else {
-        const errorMsg = data.isNotBill
-          ? "⚠️ Invalid Photo: Image is not a bill or receipt!\n\nNo receipt items or prices were detected in this image. Please take or upload a clear photo of a physical bill or receipt."
-          : (data.error || t('couldNotParse', undefined, 'Could not parse receipt image. Please try again.'));
-        alert(errorMsg);
-      }
+      const draft = await createReceiptDraft(file, profile.displayName || 'Member');
+      setEditingBill(null);
+      setPendingReceiptDraft({ ...draft.receipt, imageQuality: draft.imageQuality, _previewImages: draft.previewImages });
+      setPendingScanId(draft.scanId);
+      setShowCreateBillModal(true);
     } catch (err) {
       console.error(err);
-      alert('Error uploading receipt image.');
+      alert(err instanceof Error ? err.message : 'Error uploading receipt image.');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -371,11 +327,10 @@ export default function GroupWorkspacePage() {
     setShowCamera(false);
     const parsedReceipt = scanResult.receipt || scanResult.session;
     if (parsedReceipt) {
-      await handleAddBillToGroup({
-        title: parsedReceipt.storeName || 'Camera Receipt',
-        currency: parsedReceipt.currency || 'NIS',
-        items: parsedReceipt.items || []
-      });
+      setEditingBill(null);
+      setPendingReceiptDraft(parsedReceipt);
+      setPendingScanId(scanResult.scanId || '');
+      setShowCreateBillModal(true);
     }
   };
 
@@ -493,17 +448,25 @@ export default function GroupWorkspacePage() {
           onClose={() => {
             setShowCreateBillModal(false);
             setEditingBill(null);
+            setPendingReceiptDraft(null);
+            setPendingScanId('');
           }}
           onLaunchSession={(data) => {
             handleAddBillToGroup({
               id: editingBill?.id,
               title: data.storeName,
+              date: data.date || pendingReceiptDraft?.date || editingBill?.date,
               currency: data.currency,
               items: data.items,
               payerId: editingBill?.payerId || currentMemberId,
+              receipt: pendingReceiptDraft
+                ? { ...receiptConfirmationPayload(pendingReceiptDraft), scanId: pendingScanId, confirmedByUser: true }
+                : undefined,
+              scanId: pendingScanId || undefined,
+              confirmedByUser: Boolean(pendingScanId),
             });
           }}
-          initialData={editingBill || { currency: group.currency || 'NIS' }}
+          initialData={editingBill || pendingReceiptDraft || { currency: group.currency || 'NIS' }}
         />
       )}
 
@@ -570,6 +533,9 @@ export default function GroupWorkspacePage() {
               <button
                 onClick={() => {
                   setShowStartSplitModal(false);
+                  setPendingReceiptDraft(null);
+                  setPendingScanId('');
+                  setEditingBill(null);
                   setShowCreateBillModal(true);
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
@@ -888,11 +854,13 @@ export default function GroupWorkspacePage() {
               ) || validMembers[0];
               const payerName = activePayerMember?.name || 'Group Member';
               const itemsList = Array.isArray(bill.items) ? bill.items : [];
-              const canManageBill = isGroupHost || bill.createdByMemberId === currentMemberId;
+              const isPaymentLocked = bill.status === 'settled'
+                || (Array.isArray(bill.settledMemberIds) && bill.settledMemberIds.length > 0);
+              const canManageBill = !isPaymentLocked && (isGroupHost || bill.createdByMemberId === currentMemberId);
 
-              const handleToggleItemClaim = (itemId: string, memberIdToToggle: string) => {
-                if (memberIdToToggle !== currentMemberId) return;
-                sendGroupBillAction('TOGGLE_CLAIM', { billId: bill.id, itemId });
+              const handleToggleItemClaim = (itemId: string, memberIdToToggle: string, claimed: boolean) => {
+                if (isPaymentLocked || memberIdToToggle !== currentMemberId) return;
+                sendGroupBillAction('TOGGLE_CLAIM', { billId: bill.id, itemId, claimed });
               };
 
               const handleSetPayer = (newPayerId: string) => {
@@ -906,7 +874,7 @@ export default function GroupWorkspacePage() {
               return (
                 <SwipeableCard
                   key={bill.id}
-                  onDelete={() => handleDeleteBill(bill.id)}
+                  onDelete={() => isPaymentLocked ? false : handleDeleteBill(bill.id)}
                   className="shadow-sm"
                 >
                   <div
@@ -920,7 +888,7 @@ export default function GroupWorkspacePage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-0.5 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            {bill.status === 'settled' ? (
+                            {isPaymentLocked ? (
                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-emerald-500 shrink-0" aria-label="Settled">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                               </svg>
@@ -989,6 +957,8 @@ export default function GroupWorkspacePage() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                setPendingReceiptDraft(null);
+                                setPendingScanId('');
                                 setEditingBill(bill);
                                 setShowCreateBillModal(true);
                               }}
@@ -1038,8 +1008,8 @@ export default function GroupWorkspacePage() {
                                     return (
                                       <button
                                         key={m.id}
-                                        onClick={() => handleToggleItemClaim(item.id, m.id)}
-                                        disabled={!isMe}
+                                        onClick={() => handleToggleItemClaim(item.id, m.id, !isClaimed)}
+                                        disabled={!isMe || isPaymentLocked}
                                         className={`px-2 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 transition-all ${
                                           isClaimed
                                             ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-sm'

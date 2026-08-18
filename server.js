@@ -8,6 +8,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 const express = require('express');
+const crypto = require('crypto');
 const http = require('http');
 const WebSocket = require('ws');
 const next = require('next');
@@ -22,9 +23,11 @@ const parseReceiptTextWithGemini = geminiModule.parseReceiptTextWithGemini || ge
 const security = require('./lib/security');
 const debtMinimizer = require('./lib/debtMinimizer');
 const calculateDebtMinimization = debtMinimizer.calculateDebtMinimization;
+const allocateCentsProportionally = debtMinimizer.allocateCentsProportionally;
+const allocateTipAdjustedCents = debtMinimizer.allocateTipAdjustedCents;
 const splitCents = debtMinimizer.splitCents;
 const toCents = debtMinimizer.toCents;
-const { createEntityId } = require('./lib/ids');
+const { createEntityId, hashAccessToken } = require('./lib/ids');
 const { ValidationError, validateItems, validateReceiptBody } = require('./lib/validation');
 const { processSessionAction } = require('./lib/sessionActions');
 const {
@@ -36,7 +39,15 @@ const {
   publicRoom,
 } = require('./lib/roomAuth');
 const { broadcastToRoom, subscribeClient } = require('./lib/realtimeRooms');
-const { reconcileReceipt, isTotalOrTaxLine } = require('./lib/receiptMath');
+const { reconcileReceipt, getReceiptPayableTotal, isTotalOrTaxLine } = require('./lib/receiptMath');
+const { assessReceipt } = require('./lib/receiptAssessment');
+const {
+  normalizeScanId,
+  normalizeRecoveryToken,
+  createStableScanEntityId,
+  createAsyncGate,
+  createExpiringPromiseCache,
+} = require('./lib/ocrControl');
 const { processGroupBillAction } = require('./lib/groupActions');
 const { trackAnalyticsEvent } = require('./lib/analytics');
 
@@ -128,19 +139,149 @@ function getLocalNetworkIp() {
 
 app.prepare().then(() => {
   const server = express();
-  server.set('trust proxy', 1);
+  const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+  if (Number.isInteger(trustedProxyHops) && trustedProxyHops > 0) server.set('trust proxy', trustedProxyHops);
   const httpServer = http.createServer(server);
   const wss = new WebSocket.Server({ noServer: true, maxPayload: 10_000 });
+  const wsConnectionsByIp = new Map();
+  const maxWebSockets = 500;
+  const maxWebSocketsPerIp = 8;
+
+  function rejectUpgrade(socket, statusCode, statusText) {
+    if (!socket.destroyed) {
+      socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`);
+      socket.destroy();
+    }
+  }
+
+  function websocketClientIp(request) {
+    if (trustedProxyHops > 0) {
+      const forwarded = String(request.headers['x-forwarded-for'] || '').split(',').map((part) => part.trim()).filter(Boolean);
+      if (forwarded.length) return forwarded[Math.max(0, forwarded.length - trustedProxyHops)] || forwarded[0];
+    }
+    return request.socket.remoteAddress || 'unknown';
+  }
 
   httpServer.on('upgrade', (request, socket, head) => {
-    if (request.url && !request.url.startsWith('/_next')) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
-      });
+    const pathname = new URL(request.url || '/', 'http://localhost').pathname;
+    if (pathname !== '/') return rejectUpgrade(socket, 404, 'Not Found');
+    const origin = String(request.headers.origin || '');
+    const host = String(request.headers.host || '');
+    if (origin) {
+      try {
+        if (new URL(origin).host !== host) return rejectUpgrade(socket, 403, 'Forbidden');
+      } catch (_) {
+        return rejectUpgrade(socket, 403, 'Forbidden');
+      }
     }
+    const clientIp = websocketClientIp(request);
+    if (wss.clients.size >= maxWebSockets || (wsConnectionsByIp.get(clientIp) || 0) >= maxWebSocketsPerIp) {
+      return rejectUpgrade(socket, 429, 'Too Many Requests');
+    }
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      ws.clientIp = clientIp;
+      wsConnectionsByIp.set(clientIp, (wsConnectionsByIp.get(clientIp) || 0) + 1);
+      wss.emit('connection', ws, request);
+    });
   });
 
-  server.use(express.json({ limit: '15mb' }));
+  let activeReceiptRequests = 0;
+  const activeReceiptRequestsByIp = new Map();
+  let activeMutationRequests = 0;
+  const activeMutationRequestsByIp = new Map();
+  server.use((req, res, nextMiddleware) => {
+    const isApiRequest = req.path.startsWith('/api/');
+    const isApiMutation = req.path.startsWith('/api/') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    const isReceiptRequest = req.method === 'POST' && req.path.startsWith('/api/receipt/');
+    const contentLength = Number(req.headers['content-length'] || 0);
+    if (!isApiRequest) return nextMiddleware();
+    if (!isApiMutation) {
+      if (contentLength > 0) return res.status(413).json({ error: 'Request bodies are not accepted on this endpoint' });
+      return nextMiddleware();
+    }
+    if (isReceiptRequest) return nextMiddleware();
+    if (contentLength > 768 * 1024) return res.status(413).json({ error: 'API request is too large' });
+    const mutationIp = req.ip || req.socket.remoteAddress || 'unknown';
+    const activeForIp = activeMutationRequestsByIp.get(mutationIp) || 0;
+    if (activeForIp >= 8 || activeMutationRequests >= 48) {
+      return res.status(429).json({ error: 'Too many active updates. Please retry shortly.' });
+    }
+    activeMutationRequests += 1;
+    activeMutationRequestsByIp.set(mutationIp, activeForIp + 1);
+    let released = false;
+    const timeout = setTimeout(() => {
+      if (!req.complete && !res.headersSent) {
+        res.status(408).json({ error: 'Request body timed out.' });
+        req.destroy();
+      }
+    }, 10_000);
+    const release = () => {
+      if (released) return;
+      released = true;
+      clearTimeout(timeout);
+      activeMutationRequests = Math.max(0, activeMutationRequests - 1);
+      const remaining = Math.max(0, (activeMutationRequestsByIp.get(mutationIp) || 1) - 1);
+      if (remaining) activeMutationRequestsByIp.set(mutationIp, remaining);
+      else activeMutationRequestsByIp.delete(mutationIp);
+    };
+    req.once('end', () => clearTimeout(timeout));
+    res.once('finish', release);
+    res.once('close', release);
+    return nextMiddleware();
+  });
+
+  server.use((req, res, nextMiddleware) => {
+    const isReceiptRequest = req.method === 'POST' && req.path.startsWith('/api/receipt/');
+    if (!isReceiptRequest) return nextMiddleware();
+    const contentLength = Number(req.headers['content-length'] || 0);
+    if (contentLength > 12 * 1024 * 1024) return res.status(413).json({ error: 'Receipt request is too large' });
+    const admissionIp = req.ip || req.socket.remoteAddress || 'unknown';
+    const activeForIp = activeReceiptRequestsByIp.get(admissionIp) || 0;
+    if (activeForIp >= 3) return res.status(429).json({ error: 'Too many receipt requests from this connection.' });
+    if (activeReceiptRequests >= 8) return res.status(503).json({ error: 'Receipt scanning is busy. Please try again shortly.' });
+    activeReceiptRequests += 1;
+    activeReceiptRequestsByIp.set(admissionIp, activeForIp + 1);
+    let released = false;
+    const bodyTimeoutMs = contentLength > 0
+      ? Math.min(55_000, Math.max(10_000, Math.ceil(contentLength / (200 * 1024)) * 1_000))
+      : 10_000;
+    const bodyTimeout = setTimeout(() => {
+      if (req.complete || res.headersSent) return;
+      res.status(408).json({ error: 'Receipt upload timed out.' });
+      req.destroy();
+    }, bodyTimeoutMs);
+    req.once('end', () => clearTimeout(bodyTimeout));
+    const release = () => {
+      if (released) return;
+      released = true;
+      clearTimeout(bodyTimeout);
+      activeReceiptRequests = Math.max(0, activeReceiptRequests - 1);
+      const remainingForIp = Math.max(0, (activeReceiptRequestsByIp.get(admissionIp) || 1) - 1);
+      if (remainingForIp === 0) activeReceiptRequestsByIp.delete(admissionIp);
+      else activeReceiptRequestsByIp.set(admissionIp, remainingForIp);
+    };
+    res.once('finish', release);
+    res.once('close', release);
+    return nextMiddleware();
+  });
+
+  const receiptJsonParser = express.json({ limit: '12mb' });
+  const standardApiJsonParser = express.json({ limit: '768kb' });
+  server.use((req, res, nextMiddleware) => {
+    if (!req.path.startsWith('/api/')) return nextMiddleware();
+    const parser = req.method === 'POST' && req.path.startsWith('/api/receipt/')
+      ? receiptJsonParser
+      : standardApiJsonParser;
+    return parser(req, res, nextMiddleware);
+  });
+  server.use((error, req, res, nextMiddleware) => {
+    if (error?.type === 'entity.too.large') return res.status(413).json({ error: 'Request body is too large' });
+    return nextMiddleware(error);
+  });
+
+  const ocrGate = createAsyncGate({ maxConcurrent: 3, maxQueue: 8, waitTimeoutMs: 1_000 });
+  const ocrResultCache = createExpiringPromiseCache({ ttlMs: 5 * 60_000, maxEntries: 200 });
+  const accountReadGate = createAsyncGate({ maxConcurrent: 2, maxQueue: 4, waitTimeoutMs: 750 });
 
   // 🛡️ Enterprise Security Headers Middleware
   server.use((req, res, nextMiddleware) => {
@@ -156,8 +297,21 @@ app.prepare().then(() => {
     nextMiddleware();
   });
 
-  function sendToRoom(type, id, payload) {
-    broadcastToRoom(wss.clients, type, id, payload, WebSocket.OPEN);
+  function memberHasSubscriptionHash(member, tokenHash) {
+    if (!member || !tokenHash) return false;
+    return [member.accessTokenHash, ...(Array.isArray(member.accessTokenHashes) ? member.accessTokenHashes : [])]
+      .filter(Boolean)
+      .includes(tokenHash);
+  }
+
+  function sendToRoom(type, id, payload, room) {
+    broadcastToRoom(wss.clients, type, id, payload, WebSocket.OPEN, (client, key) => {
+      const authorization = client.roomAuthorizations instanceof Map
+        ? client.roomAuthorizations.get(key)
+        : null;
+      const member = room?.members?.find((candidate) => candidate.id === authorization?.memberId && candidate.active !== false);
+      return memberHasSubscriptionHash(member, authorization?.tokenHash);
+    });
   }
 
   function publicGroupWithDebt(group) {
@@ -173,21 +327,18 @@ app.prepare().then(() => {
   }
 
   function authorizedRoomMember(req, room) {
-    const found = findRoomMember(room, {
+    return findRoomMember(room, {
       uid: req.user?.uid,
       accessToken: getRequestRoomToken(req),
-      name: req.user?.name || req.body?.name || req.body?.payload?.name,
     });
-    if (found) return found;
-    const reqMemberId = req.body?.payload?.memberId || req.body?.memberId;
-    if (reqMemberId && Array.isArray(room?.members)) {
-      const byId = room.members.find((m) => m.id === reqMemberId && m.active !== false);
-      if (byId) return byId;
-    }
-    if (Array.isArray(room?.members) && room.members.length === 1 && room.members[0].active !== false) {
-      return room.members[0];
-    }
-    return null;
+  }
+
+  function roomDiscovery(room) {
+    return {
+      id: room.id,
+      code: room.code,
+      status: room.status,
+    };
   }
 
   function sendRouteError(res, err, fallbackMessage) {
@@ -196,24 +347,107 @@ app.prepare().then(() => {
     return res.status(status).json({ error: status >= 500 ? fallbackMessage : err.message });
   }
 
-  global.broadcastSessionState = async function (sessionId) {
-    const session = await db.getSession(sessionId);
-    if (!session) return;
+  function createSessionHistoryRecord(session, groupName = '') {
+    const publicSession = publicRoom(session);
+    const subtotal = getReceiptPayableTotal(session);
+    const totalAmount = Math.round(subtotal * (1 + Number(session.tipPercentage || 0) / 100) * 100) / 100;
+    const memberIds = [...new Set((session.members || []).map((member) => (
+      member?.userId
+      || member?.uid
+      || (member?.id && !String(member.id).startsWith('member_') ? member.id : '')
+    )).filter(Boolean))];
+    return {
+      id: session.id,
+      storeName: session.storeName || 'Bill Session',
+      date: session.date || new Date().toISOString().split('T')[0],
+      currency: session.currency || 'NIS',
+      totalAmount,
+      payableSubtotal: subtotal,
+      membersCount: session.members?.length || 1,
+      members: publicSession.members || [],
+      memberIds,
+      items: publicSession.items || [],
+      tipPercentage: session.tipPercentage || 0,
+      settledAt: session.settledAt || Date.now(),
+      createdAt: session.createdAt || Date.now(),
+      ...(session.groupId ? { groupId: session.groupId } : {}),
+      ...(session.groupId && groupName ? { groupName } : {}),
+      ...(session.payerId ? { payerId: session.payerId } : {}),
+    };
+  }
 
-    sendToRoom('session', session.id, {
-      type: 'SESSION_UPDATE',
-      session: publicRoom(session),
-    });
+  function encodeHistoryCursor(source, offset, emitted) {
+    return Buffer.from(JSON.stringify({ v: 1, source, offset, emitted }), 'utf8').toString('base64url');
+  }
+
+  function decodeHistoryCursor(rawCursor) {
+    if (!rawCursor) return { source: 'canonical', offset: 0, emitted: 0 };
+    try {
+      const parsed = JSON.parse(Buffer.from(String(rawCursor), 'base64url').toString('utf8'));
+      if (parsed?.v !== 1 || !['canonical', 'legacy'].includes(parsed.source)) return null;
+      const offset = Number(parsed.offset);
+      const emitted = Number(parsed.emitted);
+      if (!Number.isInteger(offset) || offset < 0 || offset > 200) return null;
+      if (!Number.isInteger(emitted) || emitted < 0 || emitted > 200) return null;
+      return { source: parsed.source, offset, emitted };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function amountWithTip(baseAmount, tipPercentage) {
+    const baseCents = toCents(baseAmount);
+    return Math.round(baseCents * (1 + Math.max(0, Number(tipPercentage) || 0) / 100)) / 100;
+  }
+
+  function groupBillContentDigest(bill) {
+    const items = (Array.isArray(bill?.items) ? bill.items : []).map((item) => ({
+      name: String(item?.name || ''),
+      price: Number(item?.price || 0),
+      quantity: Number(item?.quantity || 1),
+      unitPrice: Number(item?.unitPrice || 0),
+      lineTotal: Number(item?.lineTotal ?? item?.price ?? 0),
+      claimedBy: [...new Set(Array.isArray(item?.claimedBy) ? item.claimedBy.map(String) : [])].sort(),
+    }));
+    return crypto.createHash('sha256').update(JSON.stringify({
+      title: String(bill?.title || bill?.storeName || ''),
+      date: String(bill?.date || ''),
+      currency: String(bill?.currency || ''),
+      payerId: String(bill?.payerId || ''),
+      tipPercentage: Math.max(0, Number(bill?.tipPercentage) || 0),
+      receiptTotal: optionalReceiptAmount(bill?.receiptTotal),
+      subtotal: optionalReceiptAmount(bill?.subtotal),
+      tax: optionalReceiptAmount(bill?.tax),
+      service: optionalReceiptAmount(bill?.service),
+      discount: optionalReceiptAmount(bill?.discount),
+      items,
+    })).digest('hex');
+  }
+
+  global.broadcastSessionState = async function (sessionId) {
+    try {
+      const session = await db.getSession(sessionId);
+      if (!session) return;
+      sendToRoom('session', session.id, {
+        type: 'SESSION_UPDATE',
+        session: publicRoom(session),
+      }, session);
+    } catch (error) {
+      console.warn('Session broadcast refresh failed:', error?.message || error);
+    }
   };
 
   global.broadcastGroupState = async function (groupId) {
-    const group = await db.getGroup(groupId);
-    if (!group) return;
-
-    sendToRoom('group', group.id, {
-      type: 'GROUP_UPDATE',
-      group: publicGroupWithDebt(group),
-    });
+    try {
+      const group = await db.getGroup(groupId);
+      if (!group) return;
+      sendToRoom('group', group.id, {
+        type: 'GROUP_UPDATE',
+        group: publicGroupWithDebt(group),
+      }, group);
+    } catch (error) {
+      console.warn('Group broadcast refresh failed:', error?.message || error);
+    }
   };
 
   const avatarColors = ['#A3E635', '#38BDF8', '#F472B6', '#A78BFA', '#FBBF24', '#34D399'];
@@ -221,33 +455,163 @@ app.prepare().then(() => {
     return avatarColors[Math.floor(Math.random() * avatarColors.length)];
   }
 
-  const ocrRateLimiter = security.createIpRateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    message: 'Too many receipt scans. Maximum 5 scans allowed per 15 minutes. Please wait before trying again.',
-  });
+  const ocrRateBuckets = new Map();
+  const sessionCreateRateBuckets = new Map();
+  const roomLookupRateBuckets = new Map();
+  const roomJoinRateBuckets = new Map();
+  const mutationRateBuckets = new Map();
+  const accountReadRateBuckets = new Map();
+  function pruneRateBuckets(buckets, now) {
+    for (const [bucketKey, value] of buckets) {
+      if (now - value.startedAt > 10 * 60 * 1000) buckets.delete(bucketKey);
+    }
+    while (buckets.size > 2_000) buckets.delete(buckets.keys().next().value);
+  }
+
+  function sessionCreateRateLimit(req, res, nextMiddleware) {
+    const now = Date.now();
+    const key = req.user?.uid
+      ? `user:${req.user.uid}`
+      : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+    const existing = sessionCreateRateBuckets.get(key);
+    const bucket = !existing || now - existing.startedAt > 10 * 60 * 1000
+      ? { startedAt: now, count: 0 }
+      : existing;
+    bucket.count += 1;
+    sessionCreateRateBuckets.set(key, bucket);
+    if (sessionCreateRateBuckets.size > 1_000) pruneRateBuckets(sessionCreateRateBuckets, now);
+    if (bucket.count > 30) {
+      return res.status(429).json({ error: 'Too many new bills. Please wait a few minutes and try again.' });
+    }
+    return nextMiddleware();
+  }
+
   function ocrRateLimit(req, res, nextMiddleware) {
-    return ocrRateLimiter.middleware(req, res, nextMiddleware);
+    // User-confirmed/manual drafts do not call an OCR provider and must not
+    // consume the scan quota.
+    if (req.body?.parsedBill && !req.body?.imageBase64 && !req.body?.imageBase64Parts && !req.body?.rawText) {
+      return nextMiddleware();
+    }
+    const now = Date.now();
+    const key = req.user?.uid
+      ? `user:${req.user.uid}`
+      : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+    const existing = ocrRateBuckets.get(key);
+    const bucket = !existing || now - existing.startedAt > 10 * 60 * 1000
+      ? { startedAt: now, count: 0 }
+      : existing;
+    bucket.count += 1;
+    ocrRateBuckets.set(key, bucket);
+    if (ocrRateBuckets.size > 1000) {
+      pruneRateBuckets(ocrRateBuckets, now);
+    }
+    if (bucket.count > 10) {
+      return res.status(429).json({ error: 'Too many receipt scans. Please wait a few minutes and try again.' });
+    }
+    return nextMiddleware();
+  }
+
+  function roomWindowRateLimit(buckets, limit, message) {
+    return (req, res, nextMiddleware) => {
+      const now = Date.now();
+      const key = req.user?.uid
+        ? `user:${req.user.uid}`
+        : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+      const previous = buckets.get(key);
+      const bucket = !previous || now - previous.startedAt > 10 * 60_000
+        ? { startedAt: now, count: 0 }
+        : previous;
+      bucket.count += 1;
+      buckets.set(key, bucket);
+      if (buckets.size > 1_000) pruneRateBuckets(buckets, now);
+      if (bucket.count > limit) return res.status(429).json({ error: message });
+      return nextMiddleware();
+    };
+  }
+
+  const roomLookupRateLimit = roomWindowRateLimit(roomLookupRateBuckets, 250, 'Too many room lookups. Please wait and try again.');
+  const roomJoinRateLimit = roomWindowRateLimit(roomJoinRateBuckets, 120, 'Too many room join attempts. Please wait and try again.');
+  const mutationRateLimit = roomWindowRateLimit(mutationRateBuckets, 240, 'Too many room updates. Please wait and try again.');
+  const accountReadRateLimit = roomWindowRateLimit(accountReadRateBuckets, 240, 'Too many account reads. Please wait and try again.');
+  async function accountReadAdmission(req, res, nextMiddleware) {
+    try {
+      const releaseGate = await accountReadGate.acquire();
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        releaseGate();
+      };
+      res.once('finish', release);
+      res.once('close', release);
+      return nextMiddleware();
+    } catch (_) {
+      return res.status(503).json({ error: 'Account data is busy. Please retry shortly.' });
+    }
+  }
+
+  function receiptInputDigest(body) {
+    const hash = crypto.createHash('sha256');
+    const imageParts = Array.isArray(body?.imageBase64Parts)
+      ? body.imageBase64Parts
+      : (typeof body?.imageBase64 === 'string' ? [body.imageBase64] : []);
+    if (imageParts.length) {
+      imageParts.forEach((part) => hash.update(String(part)));
+      hash.update(String(body?.mimeType || ''));
+    } else if (typeof body?.rawText === 'string') {
+      hash.update(body.rawText);
+    } else if (typeof body?.parsedBill?.inputDigest === 'string') {
+      return security.sanitizeString(body.parsedBill.inputDigest, 64);
+    } else {
+      return '';
+    }
+    return hash.digest('hex');
   }
 
   async function parseReceiptRequest(req) {
     const {
       imageBase64,
+      imageBase64Parts,
       mimeType,
       parsedBill: clientParsed,
       customGeminiKey,
       rawText,
+      confirmedByUser,
+      imageQuality,
+      scanId,
     } = validateReceiptBody(req.body);
 
     let parsedReceipt = null;
     if (rawText) {
       parsedReceipt = await parseReceiptTextWithGemini(rawText, customGeminiKey);
-    } else if (imageBase64) {
-      parsedReceipt = await parseReceiptImage(imageBase64, mimeType, customGeminiKey);
+    } else if (imageBase64Parts.length || imageBase64) {
+      parsedReceipt = await parseReceiptImage(
+        imageBase64Parts.length ? imageBase64Parts : imageBase64,
+        mimeType,
+        customGeminiKey,
+      );
     }
 
     if ((!parsedReceipt?.items?.length) && clientParsed?.items?.length) parsedReceipt = clientParsed;
     if (!parsedReceipt?.items?.length) return null;
+    const effectiveImageQuality = sanitizeImageQuality(imageQuality);
+    const normalizedAmounts = {
+      receiptTotal: optionalReceiptAmount(parsedReceipt.receiptTotal ?? parsedReceipt.total),
+      subtotal: optionalReceiptAmount(parsedReceipt.subtotal),
+      tax: optionalReceiptAmount(parsedReceipt.tax),
+      service: optionalReceiptAmount(parsedReceipt.service),
+      discount: optionalReceiptAmount(Math.abs(Number(parsedReceipt.discount))),
+    };
+    const providerInput = Boolean(rawText || imageBase64Parts.length || imageBase64);
+    const normalizedScanId = normalizeScanId(scanId);
+    const ocrEvidence = sanitizeOcrEvidence(parsedReceipt.ocr)
+      || (providerInput ? { source: getOcrSource(req.body), modelName: '', modelAttempts: 0, verificationStatus: '' } : null);
+    const hasReceiptEvidence = Boolean(
+      providerInput
+      || normalizedScanId
+      || ocrEvidence
+      || Object.values(normalizedAmounts).some((value) => value !== null)
+    );
 
     const filteredItems = (parsedReceipt.items || []).filter((item) => {
       const name = item?.name || item?.description || '';
@@ -264,22 +628,61 @@ app.prepare().then(() => {
       storeName: security.sanitizeString(parsedReceipt.storeName || 'Scanned Receipt', 80),
       date: security.sanitizeString(parsedReceipt.date || new Date().toISOString().split('T')[0], 20),
       currency: security.sanitizeString(parsedReceipt.currency || 'NIS', 5).toUpperCase(),
-      receiptTotal: parsedReceipt.receiptTotal ?? parsedReceipt.total ?? null,
-      subtotal: parsedReceipt.subtotal ?? null,
-      tax: parsedReceipt.tax ?? null,
-      service: parsedReceipt.service ?? null,
-      discount: parsedReceipt.discount ?? null,
+      ...normalizedAmounts,
+      ocr: ocrEvidence,
+      imageQuality: effectiveImageQuality,
+      scanId: normalizedScanId,
+      inputDigest: receiptInputDigest(req.body),
       items,
     };
-    receipt.reconciliation = reconcileReceipt(receipt);
+    receipt.reconciliation = hasReceiptEvidence ? reconcileReceipt(receipt) : null;
+    receipt.assessment = hasReceiptEvidence
+      ? assessReceipt(receipt, {
+          source: receipt.ocr?.source || 'receipt-evidence',
+          imageQuality: effectiveImageQuality,
+          confirmedByUser,
+        })
+      : null;
+    if (hasReceiptEvidence && confirmedByUser) receipt.confirmedByUserAt = Date.now();
     return receipt;
   }
 
   function getOcrSource(body) {
-    if (body?.imageBase64) return 'server-image';
+    if (body?.imageBase64 || (Array.isArray(body?.imageBase64Parts) && body.imageBase64Parts.length)) return 'server-image';
     if (body?.rawText) return 'client-raw-text';
     if (body?.parsedBill) return 'client-parsed';
     return 'unknown';
+  }
+
+  function optionalReceiptAmount(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0 || number > 50_000) return null;
+    return Math.round((number + Number.EPSILON) * 100) / 100;
+  }
+
+  function sanitizeOcrEvidence(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return {
+      source: security.sanitizeString(value.source || '', 30),
+      modelName: security.sanitizeString(value.modelName || '', 50),
+      verificationModelName: security.sanitizeString(value.verificationModelName || '', 50),
+      modelAttempts: Math.max(0, Math.min(10, Number(value.modelAttempts) || 0)),
+      verificationStatus: security.sanitizeString(value.verificationStatus || '', 50),
+    };
+  }
+
+  function sanitizeImageQuality(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return {
+      width: Math.max(0, Math.min(20_000, Number(value.width) || 0)),
+      height: Math.max(0, Math.min(20_000, Number(value.height) || 0)),
+      meanBrightness: Math.max(0, Math.min(255, Number(value.meanBrightness) || 0)),
+      edgeScore: Math.max(0, Math.min(255, Number(value.edgeScore) || 0)),
+      warnings: Array.isArray(value.warnings)
+        ? value.warnings.filter((item) => typeof item === 'string').slice(0, 10).map((item) => security.sanitizeString(item, 40))
+        : [],
+    };
   }
 
   // REST API Routes
@@ -293,7 +696,17 @@ app.prepare().then(() => {
       metadata: { route: '/api/receipt/parse', ocrSource },
     });
     try {
-      const receipt = await parseReceiptRequest(req);
+      const scanId = normalizeScanId(req.body?.scanId);
+      const ownerKey = req.user?.uid || req.ip || req.socket.remoteAddress || 'guest';
+      const cacheKey = scanId ? `parse:${ownerKey}:${scanId}:${receiptInputDigest(req.body)}` : '';
+      const receipt = await ocrResultCache.run(cacheKey, async () => {
+        const release = await ocrGate.acquire();
+        try {
+          return await parseReceiptRequest(req);
+        } finally {
+          release();
+        }
+      });
       if (!receipt) {
         void trackAnalyticsEvent('ocr_scan_failed', {
           userId: req.user?.uid,
@@ -330,7 +743,7 @@ app.prepare().then(() => {
     }
   });
 
-  server.post('/api/receipt/scan', authenticateUser, ocrRateLimit, async (req, res) => {
+  server.post('/api/receipt/scan', authenticateUser, sessionCreateRateLimit, ocrRateLimit, async (req, res) => {
     const startedAt = Date.now();
     const ocrSource = getOcrSource(req.body);
     void trackAnalyticsEvent('ocr_scan_started', {
@@ -338,7 +751,23 @@ app.prepare().then(() => {
       metadata: { route: '/api/receipt/scan', ocrSource },
     });
     try {
-      const parsedReceipt = await parseReceiptRequest(req);
+      const providerBackedInput = Boolean(
+        req.body?.imageBase64
+        || (Array.isArray(req.body?.imageBase64Parts) && req.body.imageBase64Parts.length)
+        || req.body?.rawText
+      );
+      const requestScanId = normalizeScanId(req.body?.scanId);
+      const requestOwnerKey = req.user?.uid || req.ip || req.socket.remoteAddress || 'guest';
+      const parsedReceipt = providerBackedInput
+        ? await ocrResultCache.run(requestScanId ? `scan:${requestOwnerKey}:${requestScanId}:${receiptInputDigest(req.body)}` : '', async () => {
+            const release = await ocrGate.acquire();
+            try {
+              return await parseReceiptRequest(req);
+            } finally {
+              release();
+            }
+          })
+        : await parseReceiptRequest(req);
       if (!parsedReceipt) {
         void trackAnalyticsEvent('ocr_scan_failed', {
           userId: req.user?.uid,
@@ -354,58 +783,172 @@ app.prepare().then(() => {
         });
       }
 
+      const inputWasOcr = Boolean(parsedReceipt.reconciliation || parsedReceipt.ocr || parsedReceipt.scanId);
+      if (inputWasOcr && req.body?.confirmedByUser !== true) {
+        return res.status(409).json({
+          success: false,
+          confirmationRequired: true,
+          receipt: parsedReceipt,
+          error: 'Please review and confirm the scanned receipt before starting the split.',
+        });
+      }
+      if (inputWasOcr) {
+        parsedReceipt.assessment = assessReceipt(parsedReceipt, {
+          source: parsedReceipt.ocr?.source || 'receipt-evidence',
+          imageQuality: parsedReceipt.imageQuality,
+          confirmedByUser: true,
+        });
+        parsedReceipt.confirmedByUserAt = Date.now();
+      }
+      const confirmedContentDigest = groupBillContentDigest(parsedReceipt);
+
       const rawHostName = req.body?.hostName || (req.user ? req.user.name : 'Host');
-      const host = createRoomMember({
-        uid: req.user?.uid,
-        name: rawHostName,
-        isHost: true,
-        avatarColor: '#A3E635',
-      });
+      const scanId = normalizeScanId(req.body?.scanId);
+      const recoveryToken = scanId ? normalizeRecoveryToken(req.body?.recoveryToken) : '';
+      if (scanId && !recoveryToken) {
+        return res.status(400).json({ error: 'A valid receipt recovery token is required.' });
+      }
+      const ownerKey = recoveryToken
+        ? `recovery:${crypto.createHash('sha256').update(recoveryToken).digest('hex')}`
+        : (req.user?.uid || req.ip || req.socket.remoteAddress || 'guest');
+      const stableSessionId = scanId ? createStableScanEntityId('sess_scan', ownerKey, scanId) : '';
+      const sessionResponse = await (async () => {
+          const existingSession = stableSessionId ? await db.getSession(stableSessionId) : null;
+          if (existingSession) {
+            if (parsedReceipt.inputDigest && existingSession.inputDigest && parsedReceipt.inputDigest !== existingSession.inputDigest) {
+              const error = new Error('This scan identifier belongs to a different receipt.');
+              error.statusCode = 409;
+              throw error;
+            }
+            if (existingSession.contentDigest && existingSession.contentDigest !== confirmedContentDigest) {
+              const error = new Error('This receipt draft changed after it was confirmed. Reopen the existing split or use a new scan.');
+              error.statusCode = 409;
+              throw error;
+            }
+            const existingHost = Array.isArray(existingSession.members)
+              ? existingSession.members.find((member) => member.isHost)
+              : null;
+            if (!existingHost) {
+              const error = new Error('Existing scan session is invalid');
+              error.statusCode = 409;
+              throw error;
+            }
+            const existingToken = getRequestRoomToken(req) || recoveryToken;
+            const authenticatedExistingHost = findRoomMember(existingSession, {
+              uid: req.user?.uid,
+              accessToken: existingToken,
+            });
+            if (!authenticatedExistingHost?.isHost) {
+              const error = new Error('This receipt was already confirmed. Open the existing split instead of creating it again.');
+              error.statusCode = 409;
+              throw error;
+            }
+            return {
+              success: true,
+              idempotentReplay: true,
+              sessionId: existingSession.id,
+              code: existingSession.code,
+              hostId: existingHost.id,
+              memberId: existingHost.id,
+              accessToken: existingToken,
+              session: publicRoom(existingSession),
+            };
+          }
 
-      const newSession = {
-        id: createEntityId('sess'),
-        code: await db.generateUniqueRoomCode(),
-        storeName: security.sanitizeString(parsedReceipt.storeName || 'Scanned Receipt', 40),
-        date: parsedReceipt.date || new Date().toISOString().split('T')[0],
-        currency: security.sanitizeString(parsedReceipt.currency || 'NIS', 5),
-        receiptTotal: parsedReceipt.receiptTotal,
-        subtotal: parsedReceipt.subtotal,
-        tax: parsedReceipt.tax,
-        service: parsedReceipt.service,
-        discount: parsedReceipt.discount,
-        reconciliation: parsedReceipt.reconciliation,
-        hostPhone: '',
-        status: 'active',
-        createdAt: Date.now(),
-        members: [host.member],
-        items: parsedReceipt.items,
-      };
+          const host = createRoomMember({
+            uid: req.user?.uid,
+            name: rawHostName,
+            isHost: true,
+            avatarColor: '#A3E635',
+          });
+          if (recoveryToken) {
+            host.member.accessTokenHash = hashAccessToken(recoveryToken);
+            host.accessToken = recoveryToken;
+          }
+          const newSession = {
+            id: stableSessionId || createEntityId('sess'),
+            code: await db.generateUniqueRoomCode(),
+            storeName: security.sanitizeString(parsedReceipt.storeName || 'Scanned Receipt', 40),
+            date: parsedReceipt.date || new Date().toISOString().split('T')[0],
+            currency: security.sanitizeString(parsedReceipt.currency || 'NIS', 5),
+            receiptTotal: parsedReceipt.receiptTotal,
+            subtotal: parsedReceipt.subtotal,
+            tax: parsedReceipt.tax,
+            service: parsedReceipt.service,
+            discount: parsedReceipt.discount,
+            reconciliation: parsedReceipt.reconciliation,
+            assessment: parsedReceipt.assessment,
+            ocr: parsedReceipt.ocr,
+            imageQuality: parsedReceipt.imageQuality,
+            scanId: scanId || undefined,
+            inputDigest: parsedReceipt.inputDigest || undefined,
+            contentDigest: confirmedContentDigest,
+            confirmedByUserAt: parsedReceipt.confirmedByUserAt || undefined,
+            hostPhone: '',
+            status: 'active',
+            createdAt: Date.now(),
+            members: [host.member],
+            items: parsedReceipt.items,
+          };
+          if (stableSessionId && typeof db.createSessionIfAbsent === 'function') {
+            const creation = await db.createSessionIfAbsent(newSession);
+            if (!creation.created) {
+              const persistedHost = findRoomMember(creation.session, {
+                uid: req.user?.uid,
+                accessToken: recoveryToken,
+              });
+              if (persistedHost?.isHost && (
+                !parsedReceipt.inputDigest
+                || !creation.session.inputDigest
+                || parsedReceipt.inputDigest === creation.session.inputDigest
+              ) && (
+                !creation.session.contentDigest
+                || creation.session.contentDigest === confirmedContentDigest
+              )) {
+                return {
+                  success: true,
+                  idempotentReplay: true,
+                  sessionId: creation.session.id,
+                  code: creation.session.code,
+                  hostId: persistedHost.id,
+                  memberId: persistedHost.id,
+                  accessToken: recoveryToken,
+                  session: publicRoom(creation.session),
+                };
+              }
+              const error = new Error('This receipt was already confirmed by another request.');
+              error.statusCode = 409;
+              throw error;
+            }
+          } else {
+            await db.saveSession(newSession);
+          }
 
-      await db.saveSession(newSession);
+          const commonAnalyticsContext = {
+            userId: req.user?.uid,
+            sessionId: newSession.id,
+            metadata: {
+              route: '/api/receipt/scan', ocrSource, durationMs: Date.now() - startedAt,
+              itemCount: newSession.items.length,
+              memberCount: newSession.members.length,
+              currency: newSession.currency,
+              reconciliationStatus: newSession.reconciliation?.status || 'unknown',
+            },
+          };
+          void trackAnalyticsEvent('ocr_scan_succeeded', commonAnalyticsContext);
+          void trackAnalyticsEvent('session_created', commonAnalyticsContext);
 
-      const commonAnalyticsContext = {
-        userId: req.user?.uid,
-        sessionId: newSession.id,
-        metadata: {
-          route: '/api/receipt/scan', ocrSource, durationMs: Date.now() - startedAt,
-          itemCount: newSession.items.length,
-          memberCount: newSession.members.length,
-          currency: newSession.currency,
-          reconciliationStatus: newSession.reconciliation?.status || 'unknown',
-        },
-      };
-      void trackAnalyticsEvent('ocr_scan_succeeded', commonAnalyticsContext);
-      void trackAnalyticsEvent('session_created', commonAnalyticsContext);
-
-      return res.json({
-        success: true,
-        sessionId: newSession.id,
-        code: newSession.code,
-        hostId: host.member.id,
-        memberId: host.member.id,
-        accessToken: host.accessToken,
-        session: publicRoom(newSession),
-      });
+          return {
+            success: true,
+            sessionId: newSession.id,
+            code: newSession.code,
+            hostId: host.member.id,
+            memberId: host.member.id,
+            accessToken: host.accessToken,
+            session: publicRoom(newSession),
+          };
+      })();
+      return res.json(sessionResponse);
     } catch (err) {
       void trackAnalyticsEvent('ocr_scan_failed', {
         userId: req.user?.uid,
@@ -419,117 +962,155 @@ app.prepare().then(() => {
     }
   });
 
-  server.get('/api/session/:idOrCode', async (req, res) => {
+  server.get('/api/session/:idOrCode', authenticateUser, roomLookupRateLimit, async (req, res) => {
     const sanitizedId = security.sanitizeString(req.params.idOrCode, 50);
     const session = await db.getSession(sanitizedId);
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
-    return res.json({ session: publicRoom(session) });
+    const actor = authorizedRoomMember(req, session);
+    if (/^\d{4}$/.test(sanitizedId) && !actor) {
+      return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
+    }
+    return res.json({ session: actor ? publicRoom(session) : roomDiscovery(session) });
   });
 
-  server.post('/api/session/:idOrCode/join', authenticateUser, async (req, res) => {
+  server.post('/api/session/:idOrCode/join', authenticateUser, roomJoinRateLimit, async (req, res) => {
     try {
       const session = await db.getSession(security.sanitizeString(req.params.idOrCode, 100));
       if (!session) return res.status(404).json({ error: 'Session not found' });
-      if (session.status === 'settled') return res.status(409).json({ error: 'This session is already closed' });
-
-      const joined = joinRoom(session, {
-        uid: req.user?.uid,
-        accessToken: getRequestRoomToken(req),
-        name: req.body?.name || req.user?.name || 'Guest',
-        avatarColor: getRandomAvatarColor(),
+      if (/^\d{4}$/.test(String(req.params.idOrCode || '')) && !authorizedRoomMember(req, session)) {
+        return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
+      }
+      let joined = null;
+      const mutation = await db.transactSessionAndLinkedGroup(session.id, (currentSession, currentGroup) => {
+        if (currentSession.status === 'settled') {
+          const error = new Error('This session is already closed');
+          error.statusCode = 409;
+          throw error;
+        }
+        const joinInput = {
+          uid: req.user?.uid,
+          accessToken: getRequestRoomToken(req),
+          name: req.body?.name || req.user?.name || 'Guest',
+          avatarColor: getRandomAvatarColor(),
+        };
+        if (currentGroup) {
+          const existingGroupMember = findRoomMember(currentGroup, joinInput);
+          if (!existingGroupMember) {
+            const error = new Error('Join the linked group before opening this bill session');
+            error.statusCode = 403;
+            throw error;
+          }
+          const groupJoin = joinRoom(currentGroup, joinInput);
+          if (!Array.isArray(currentSession.members)) currentSession.members = [];
+          let sessionMember = currentSession.members?.find((member) => member.id === groupJoin.member.id);
+          if (!sessionMember) {
+            sessionMember = { ...groupJoin.member, settled: false };
+            currentSession.members.push(sessionMember);
+          } else {
+            sessionMember.name = groupJoin.member.name;
+            sessionMember.isHost = groupJoin.member.isHost;
+            sessionMember.active = groupJoin.member.active;
+            sessionMember.accessTokenHash = groupJoin.member.accessTokenHash;
+            sessionMember.accessTokenHashes = groupJoin.member.accessTokenHashes;
+          }
+          joined = { member: sessionMember, accessToken: groupJoin.accessToken, changed: true };
+          return { session: currentSession, group: currentGroup };
+        }
+        joined = joinRoom(currentSession, joinInput);
+        return { session: currentSession, group: null };
       });
-      if (joined.changed) await db.saveSession(session);
+      if (!mutation || !joined) return res.status(404).json({ error: 'Session not found' });
       if (joined.changed) {
         void trackAnalyticsEvent('participant_joined', {
           userId: req.user?.uid,
-          sessionId: session.id,
-          metadata: { memberCount: session.members.length },
+          sessionId: mutation.session.id,
+          metadata: { memberCount: mutation.session.members.length },
         });
       }
-      global.broadcastSessionState(session.id);
+      global.broadcastSessionState(mutation.session.id);
       return res.json({
         success: true,
         memberId: joined.member.id,
         accessToken: joined.accessToken,
-        session: publicRoom(session),
+        session: publicRoom(mutation.session),
       });
     } catch (err) {
       return sendRouteError(res, err, 'Failed to join session');
     }
   });
 
-  server.post('/api/session/action', authenticateUser, async (req, res) => {
+  server.post('/api/session/action', authenticateUser, mutationRateLimit, async (req, res) => {
     try {
       const { sessionId, action, payload } = req.body || {};
-      const session = await db.getSession(security.sanitizeString(sessionId, 100));
-      if (!session) return res.status(404).json({ error: 'Session not found' });
-
-      const actor = authorizedRoomMember(req, session);
-      if (!actor) return res.status(401).json({ error: 'A valid room membership is required' });
-
-      const updated = processSessionAction(session, action, payload, {
-        uid: req.user?.uid,
-        memberId: actor.id,
+      const cleanSessionId = security.sanitizeString(sessionId, 100);
+      const mutation = await db.transactSessionAndLinkedGroup(cleanSessionId, (session, linkedGroup) => {
+        const actor = authorizedRoomMember(req, session);
+        if (!actor) {
+          const error = new Error('A valid room membership is required');
+          error.statusCode = 401;
+          throw error;
+        }
+        if (linkedGroup) {
+          const groupActor = authorizedRoomMember(req, linkedGroup);
+          if (!groupActor || groupActor.id !== actor.id) {
+            const error = new Error('A valid linked-group membership is required');
+            error.statusCode = 403;
+            throw error;
+          }
+        }
+        const actionId = security.sanitizeString(req.body?.actionId || '', 100);
+        if (actionId && Array.isArray(session.processedActionIds) && session.processedActionIds.includes(actionId)) {
+          return { session, group: linkedGroup, history: null, idempotentReplay: true };
+        }
+        const updatedSession = processSessionAction(session, action, payload, {
+          uid: req.user?.uid,
+          memberId: actor.id,
+        });
+        if (actionId) {
+          updatedSession.processedActionIds = [...new Set([...(updatedSession.processedActionIds || []), actionId])].slice(-50);
+        }
+        if (['ADD_ITEM', 'EDIT_ITEM', 'DELETE_ITEM'].includes(action) && updatedSession.reconciliation) {
+          updatedSession.reconciliation = reconcileReceipt(updatedSession);
+          updatedSession.assessment = assessReceipt(updatedSession, {
+            source: updatedSession.ocr?.source || 'confirmed-scan',
+            imageQuality: updatedSession.imageQuality,
+            confirmedByUser: Boolean(updatedSession.confirmedByUserAt),
+          });
+        }
+        const linkedBill = linkedGroup?.bills?.find((bill) => bill.id === updatedSession.billId || bill.sessionId === updatedSession.id);
+        if (linkedBill) {
+          linkedBill.items = updatedSession.items;
+          linkedBill.settledMemberIds = (updatedSession.members || [])
+            .filter((member) => member.active !== false && member.settled === true)
+            .map((member) => member.id);
+          linkedBill.tipPercentage = Math.max(0, Number(updatedSession.tipPercentage) || 0);
+          linkedBill.amount = amountWithTip(getReceiptPayableTotal(updatedSession), linkedBill.tipPercentage);
+          linkedBill.revision = Number(linkedBill.revision || 0) + 1;
+          if (updatedSession.reconciliation) {
+            linkedBill.reconciliation = updatedSession.reconciliation;
+            linkedBill.assessment = updatedSession.assessment;
+          }
+          if (action === 'SET_PAYER' || updatedSession.payerId) linkedBill.payerId = updatedSession.payerId;
+          if (action === 'SETTLE_ALL') {
+            linkedBill.status = 'settled';
+            linkedBill.settledAt = updatedSession.settledAt;
+          }
+        }
+        const shouldPersistHistory = action === 'SETTLE_ALL';
+        return {
+          session: updatedSession,
+          group: linkedGroup,
+          history: shouldPersistHistory ? createSessionHistoryRecord(updatedSession, linkedGroup?.name || '') : null,
+        };
       });
-      if (['ADD_ITEM', 'EDIT_ITEM', 'DELETE_ITEM'].includes(action) && updated.reconciliation) {
-        updated.reconciliation = reconcileReceipt(updated);
-      }
-
-      const linkedGroup = updated.groupId ? await db.getGroup(updated.groupId) : null;
+      if (!mutation) return res.status(404).json({ error: 'Session not found' });
+      const updated = mutation.session;
+      const linkedGroup = mutation.group;
       const linkedBill = linkedGroup?.bills?.find((bill) => bill.id === updated.billId || bill.sessionId === updated.id);
-      if (linkedBill) {
-        linkedBill.items = updated.items;
-        linkedBill.amount = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
-        if (action === 'SET_PAYER' || updated.payerId) {
-          linkedBill.payerId = updated.payerId;
-        }
-        if (action === 'SETTLE_ALL') {
-          linkedBill.status = 'settled';
-          linkedBill.settledAt = updated.settledAt;
-        }
-      }
 
-      const publicSession = publicRoom(updated);
-      const subtotal = updated.items.reduce((sum, item) => sum + Number(item.price || 0), 0);
-      const totalAmount = Math.round(subtotal * (1 + Number(updated.tipPercentage || 0) / 100) * 100) / 100;
-      const historyItem = {
-        id: updated.id,
-        storeName: updated.storeName || 'Bill Session',
-        date: updated.date || new Date().toISOString().split('T')[0],
-        currency: updated.currency || 'NIS',
-        totalAmount,
-        membersCount: updated.members?.length || 1,
-        members: publicSession.members || [],
-        items: publicSession.items || [],
-        tipPercentage: updated.tipPercentage || 0,
-        settledAt: updated.settledAt || Date.now(),
-        createdAt: updated.createdAt || Date.now(),
-        ...(updated.groupId ? { groupId: updated.groupId } : {}),
-        ...(updated.payerId ? { payerId: updated.payerId } : {}),
-      };
-
-      if (action === 'SETTLE_ALL') {
-        if (linkedGroup && linkedBill) {
-          await db.saveGroupAndSession(linkedGroup, updated);
-          await db.addToHistory(historyItem);
-        } else {
-          await db.saveSessionAndHistory(updated, historyItem);
-        }
-      } else if (action === 'TOGGLE_SETTLED' && payload.settled === true) {
-        if (linkedGroup && linkedBill) {
-          await db.saveGroupAndSession(linkedGroup, updated);
-          await db.addToHistory(historyItem);
-        } else {
-          await db.saveSessionAndHistory(updated, historyItem);
-        }
-      } else if (linkedGroup && linkedBill) {
-        await db.saveGroupAndSession(linkedGroup, updated);
-      } else {
-        await db.saveSession(updated);
-      }
-
+      const subtotal = getReceiptPayableTotal(updated);
       if (linkedGroup && linkedBill) global.broadcastGroupState(linkedGroup.id);
 
       global.broadcastSessionState(updated.id);
@@ -583,7 +1164,7 @@ app.prepare().then(() => {
   // GROUPS API ENDPOINTS
 
   // 1. Create Group
-  server.post('/api/groups', authenticateUser, async (req, res) => {
+  server.post('/api/groups', authenticateUser, sessionCreateRateLimit, async (req, res) => {
     try {
       const { name, currency, hostName } = req.body;
       const cleanName = security.sanitizeString(name || 'Trip Group', 40);
@@ -621,40 +1202,54 @@ app.prepare().then(() => {
     }
   });
 
-  // 2. Fetch Group by ID or 4-digit Code
-  server.get('/api/groups/:idOrCode', async (req, res) => {
+  // 2. Fetch Group by ID or high-entropy invite code
+  server.get('/api/groups/:idOrCode', authenticateUser, roomLookupRateLimit, async (req, res) => {
     const sanitizedId = security.sanitizeString(req.params.idOrCode, 50);
     const group = await db.getGroup(sanitizedId);
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
 
-    return res.json({ group: publicGroupWithDebt(group) });
+    const actor = authorizedRoomMember(req, group);
+    if (/^\d{4}$/.test(sanitizedId) && !actor) {
+      return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
+    }
+    return res.json({ group: actor ? publicGroupWithDebt(group) : roomDiscovery(group) });
   });
 
   // 3. Join Group by Code
-  server.post('/api/groups/join', authenticateUser, async (req, res) => {
+  server.post('/api/groups/join', authenticateUser, roomJoinRateLimit, async (req, res) => {
     try {
       const { groupId, name } = req.body;
       const group = await db.getGroup(groupId);
       if (!group) {
         return res.status(404).json({ error: 'Group not found' });
       }
+      if (/^\d{4}$/.test(String(groupId || '')) && !authorizedRoomMember(req, group)) {
+        return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
+      }
 
-      const joined = joinRoom(group, {
-        uid: req.user?.uid,
-        accessToken: getRequestRoomToken(req),
-        name: name || req.user?.name || 'Member',
-        avatarColor: getRandomAvatarColor(),
+      let joined = null;
+      const mutation = await db.transactGroupMembership(group.id, (currentGroup) => {
+        joined = joinRoom(currentGroup, {
+          uid: req.user?.uid,
+          accessToken: getRequestRoomToken(req),
+          name: name || req.user?.name || 'Member',
+          avatarColor: getRandomAvatarColor(),
+        });
+        return currentGroup;
       });
-      if (joined.changed) await db.saveGroup(group);
-      global.broadcastGroupState(group.id);
+      if (!mutation || !joined) return res.status(404).json({ error: 'Group not found' });
+      if (req.user?.uid && typeof db.addGroupToUser === 'function') {
+        await db.addGroupToUser(req.user.uid, mutation.group.id);
+      }
+      global.broadcastGroupState(mutation.group.id);
 
       return res.json({
         success: true,
         memberId: joined.member.id,
         accessToken: joined.accessToken,
-        group: publicGroupWithDebt(group),
+        group: publicGroupWithDebt(mutation.group),
       });
     } catch (err) {
       return sendRouteError(res, err, 'Failed to join group');
@@ -665,12 +1260,8 @@ app.prepare().then(() => {
     try {
       const group = await db.getGroup(security.sanitizeString(req.params.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
-      const actor = authorizedRoomMember(req, group) || (group.members || []).find((m) => 
-        m.id === req.body?.memberId || 
-        (req.body?.name && m.name && m.name.toLowerCase().trim() === req.body.name.toLowerCase().trim()) || 
-        (req.user?.name && m.name && m.name.toLowerCase().trim() === req.user.name.toLowerCase().trim())
-      );
-      const targetMemberId = actor?.id || req.body?.memberId;
+      const actor = authorizedRoomMember(req, group);
+      const targetMemberId = actor?.id;
       if (!targetMemberId) return res.status(401).json({ error: 'A valid group membership is required' });
       
       const updated = await db.leaveGroup(group.id, targetMemberId);
@@ -688,8 +1279,11 @@ app.prepare().then(() => {
     try {
       const group = await db.getGroup(security.sanitizeString(req.params.groupId, 100));
       if (!group) return res.status(404).json({ error: 'Group not found' });
-      await db.deleteGroup(group.id);
-      sendToRoom('group', group.id, { type: 'GROUP_DELETED', groupId: group.id });
+      const actor = authorizedRoomMember(req, group);
+      if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
+      if (!actor.isHost) return res.status(403).json({ error: 'Only the group host can delete this group' });
+      await db.deleteGroup(group.id, actor.id);
+      sendToRoom('group', group.id, { type: 'GROUP_DELETED', groupId: group.id }, group);
       return res.json({ success: true });
     } catch (err) {
       return sendRouteError(res, err, 'Failed to delete group');
@@ -697,7 +1291,7 @@ app.prepare().then(() => {
   });
 
   // 4. Add or Edit Bill in Group
-  server.post('/api/groups/bill', authenticateUser, async (req, res) => {
+  server.post('/api/groups/bill', authenticateUser, mutationRateLimit, async (req, res) => {
     try {
       const { groupId, bill } = req.body;
       const group = await db.getGroup(security.sanitizeString(groupId, 100));
@@ -736,16 +1330,59 @@ app.prepare().then(() => {
           claimedBy: item.claimedBy.filter((memberId) => memberIds.has(memberId)),
         }));
 
-      const billId = bill.id || createEntityId('bill');
+      const receiptEvidence = bill.receipt && typeof bill.receipt === 'object' && !Array.isArray(bill.receipt)
+        ? bill.receipt
+        : {};
+      const requestedScanId = normalizeScanId(receiptEvidence.scanId || bill.scanId);
+      const sourceSessionId = security.sanitizeString(bill.sourceSessionId || '', 100);
+      const stableBillId = requestedScanId
+        ? createStableScanEntityId('bill_scan', group.id, requestedScanId)
+        : (sourceSessionId ? createStableScanEntityId('bill_session', group.id, sourceSessionId) : '');
+      const billId = stableBillId || bill.id || createEntityId('bill');
       const existingIdx = group.bills.findIndex((candidate) => candidate.id === billId);
       const existingBill = existingIdx > -1 ? group.bills[existingIdx] : null;
+      const expectedRevision = existingBill && bill.expectedRevision !== undefined && bill.expectedRevision !== null
+        ? Math.max(0, Math.round(Number(bill.expectedRevision) || 0))
+        : null;
       if (existingBill?.status === 'settled') {
         return res.status(409).json({ error: 'A settled bill cannot be edited' });
       }
       if (existingBill && !actor.isHost && existingBill.createdByMemberId !== actor.id) {
         return res.status(403).json({ error: 'Only the bill creator or group host can edit this bill' });
       }
-      const sourceSessionId = security.sanitizeString(bill.sourceSessionId || '', 100);
+      let scanId = requestedScanId || normalizeScanId(existingBill?.scanId);
+      let confirmedByUser = receiptEvidence.confirmedByUser === true
+        || bill.confirmedByUser === true
+        || Boolean(existingBill?.confirmedByUserAt);
+      let receiptFields = {
+        receiptTotal: optionalReceiptAmount(receiptEvidence.receiptTotal) ?? optionalReceiptAmount(existingBill?.receiptTotal),
+        subtotal: optionalReceiptAmount(receiptEvidence.subtotal) ?? optionalReceiptAmount(existingBill?.subtotal),
+        tax: optionalReceiptAmount(receiptEvidence.tax) ?? optionalReceiptAmount(existingBill?.tax),
+        service: optionalReceiptAmount(receiptEvidence.service) ?? optionalReceiptAmount(existingBill?.service),
+        discount: optionalReceiptAmount(Math.abs(Number(receiptEvidence.discount))) ?? optionalReceiptAmount(existingBill?.discount),
+      };
+      let ocrEvidence = sanitizeOcrEvidence(receiptEvidence.ocr) || sanitizeOcrEvidence(existingBill?.ocr);
+      let receiptImageQuality = sanitizeImageQuality(receiptEvidence.imageQuality)
+        || sanitizeImageQuality(existingBill?.imageQuality);
+      let hasReceiptEvidence = Boolean(scanId || ocrEvidence || Object.values(receiptFields).some((value) => value !== null));
+      if (hasReceiptEvidence && !confirmedByUser) {
+        return res.status(409).json({ error: 'Please review and confirm the scanned receipt before adding it to the group.' });
+      }
+      let receiptReconciliation = hasReceiptEvidence
+        ? reconcileReceipt({ ...receiptFields, items: cleanItems })
+        : null;
+      let receiptAssessment = hasReceiptEvidence
+        ? assessReceipt({
+            ...receiptFields,
+            items: cleanItems,
+            reconciliation: receiptReconciliation,
+            ocr: ocrEvidence,
+          }, {
+            source: ocrEvidence?.source || 'confirmed-scan',
+            imageQuality: receiptImageQuality,
+            confirmedByUser,
+          })
+        : null;
       const sourceSession = sourceSessionId ? await db.getSession(sourceSessionId) : null;
       if (sourceSessionId) {
         const sourceMember = sourceSession ? findRoomMember(sourceSession, {
@@ -765,20 +1402,85 @@ app.prepare().then(() => {
           return res.status(409).json({ error: 'This session is already attached to another group bill' });
         }
       }
+      if (sourceSession && !hasReceiptEvidence) {
+        scanId = scanId || normalizeScanId(sourceSession.scanId);
+        confirmedByUser = confirmedByUser || Boolean(sourceSession.confirmedByUserAt);
+        receiptFields = {
+          receiptTotal: optionalReceiptAmount(sourceSession.receiptTotal),
+          subtotal: optionalReceiptAmount(sourceSession.subtotal),
+          tax: optionalReceiptAmount(sourceSession.tax),
+          service: optionalReceiptAmount(sourceSession.service),
+          discount: optionalReceiptAmount(sourceSession.discount),
+        };
+        ocrEvidence = sanitizeOcrEvidence(sourceSession.ocr);
+        receiptImageQuality = sanitizeImageQuality(sourceSession.imageQuality);
+        hasReceiptEvidence = Boolean(ocrEvidence || receiptFields.receiptTotal !== null);
+        receiptReconciliation = hasReceiptEvidence
+          ? reconcileReceipt({ ...receiptFields, items: cleanItems })
+          : null;
+        receiptAssessment = hasReceiptEvidence
+          ? assessReceipt({ ...receiptFields, items: cleanItems, reconciliation: receiptReconciliation, ocr: ocrEvidence }, {
+              source: ocrEvidence?.source || 'confirmed-scan',
+              imageQuality: receiptImageQuality,
+              confirmedByUser: Boolean(sourceSession.confirmedByUserAt),
+            })
+          : null;
+      }
+      if (hasReceiptEvidence && !confirmedByUser) {
+        return res.status(409).json({ error: 'Please review and confirm the scanned receipt before adding it to the group.' });
+      }
       const sessionId = sourceSession?.id || existingBill?.sessionId || ('sess_g_' + billId);
       const itemsTotal = cleanItems.reduce((sum, item) => sum + item.price, 0);
       const requestedAmount = security.sanitizePrice(bill.amount);
-      const cleanAmount = itemsTotal > 0 ? itemsTotal : requestedAmount;
+      const cleanAmount = hasReceiptEvidence
+        ? getReceiptPayableTotal({ ...receiptFields, items: cleanItems, reconciliation: receiptReconciliation })
+        : (itemsTotal > 0 ? itemsTotal : requestedAmount);
       if (cleanAmount <= 0) throw new ValidationError('Bill amount must be greater than zero');
+      const billTipPercentage = Math.max(0, Number(existingBill?.tipPercentage || sourceSession?.tipPercentage) || 0);
+      const proposedBillForDigest = {
+        title: cleanTitle,
+        date: billDate,
+        currency: groupCurrency,
+        payerId: cleanPayerId,
+        tipPercentage: billTipPercentage,
+        items: cleanItems,
+        ...receiptFields,
+      };
+      const contentDigest = groupBillContentDigest(proposedBillForDigest);
+      if (existingBill && expectedRevision === null) {
+        const matchesOriginalRequest = existingBill.contentDigest
+          ? existingBill.contentDigest === contentDigest
+          : groupBillContentDigest(existingBill) === contentDigest;
+        if (requestedScanId && matchesOriginalRequest) {
+          return res.json({
+            success: true,
+            idempotentReplay: true,
+            sessionId: existingBill.sessionId,
+            billId: existingBill.id,
+            group: publicGroupWithDebt(group),
+          });
+        }
+        return res.status(409).json({ error: 'This bill changed while it was being edited. Reopen it and apply your changes again.' });
+      }
       const newBillRecord = {
         id: billId,
         sessionId,
         title: cleanTitle,
         date: billDate,
-        amount: cleanAmount,
+        amount: amountWithTip(cleanAmount, billTipPercentage),
+        tipPercentage: billTipPercentage,
+        revision: Number(existingBill?.revision || 0) + 1,
+        contentDigest,
         payerId: cleanPayerId,
         items: cleanItems,
         currency: groupCurrency,
+        ...receiptFields,
+        reconciliation: receiptReconciliation,
+        assessment: receiptAssessment,
+        ocr: ocrEvidence,
+        imageQuality: receiptImageQuality,
+        scanId: scanId || undefined,
+        confirmedByUserAt: confirmedByUser ? (existingBill?.confirmedByUserAt || Date.now()) : undefined,
         createdByMemberId: existingBill?.createdByMemberId || actor.id,
         createdAt: existingBill?.createdAt || Date.now(),
         status: existingBill?.status || 'active',
@@ -795,26 +1497,39 @@ app.prepare().then(() => {
         id: sessionId,
         groupId: group.id,
         billId,
+        payerId: cleanPayerId,
         code: existingSession?.code || await db.generateUniqueRoomCode(),
         storeName: cleanTitle,
         date: billDate,
         currency: group.currency || 'NIS',
         hostPhone: groupHost?.phone || '',
-        status: 'active',
+        status: existingSession?.status || 'active',
+        tipPercentage: billTipPercentage,
         members: group.members.map(m => ({
           id: m.id,
           name: m.name,
           phone: m.phone || '',
           isHost: m.isHost || false,
-          settled: false,
+          settled: Boolean(existingSession?.members?.find((member) => member.id === m.id)?.settled),
           avatarColor: m.avatarColor || '#A3E635',
           accessTokenHash: m.accessTokenHash,
           active: m.active !== false,
         })),
         items: cleanItems,
+        ...receiptFields,
+        reconciliation: receiptReconciliation,
+        assessment: receiptAssessment,
+        ocr: ocrEvidence,
+        imageQuality: receiptImageQuality,
+        scanId: scanId || undefined,
+        confirmedByUserAt: confirmedByUser ? (existingSession?.confirmedByUserAt || Date.now()) : undefined,
         createdAt: existingSession?.createdAt || Date.now(),
       };
-      await db.saveGroupAndSession(group, liveSession);
+      const persisted = typeof db.saveGroupBillAndSession === 'function'
+        ? await db.saveGroupBillAndSession(group.id, newBillRecord, liveSession, actor.id, expectedRevision)
+        : await db.saveGroupAndSession(group, liveSession);
+      if (!persisted) return res.status(404).json({ error: 'Group not found' });
+      const persistedGroup = persisted.group || group;
 
       if (global.broadcastGroupState) {
         global.broadcastGroupState(group.id);
@@ -824,29 +1539,67 @@ app.prepare().then(() => {
         success: true,
         sessionId,
         billId,
-        group: publicGroupWithDebt(group),
+        group: publicGroupWithDebt(persistedGroup),
+        idempotentReplay: Boolean(persisted.idempotentReplay),
       });
     } catch (err) {
       return sendRouteError(res, err, 'Failed to save group bill');
     }
   });
 
-  server.post('/api/groups/bill/action', authenticateUser, async (req, res) => {
+  server.post('/api/groups/bill/action', authenticateUser, mutationRateLimit, async (req, res) => {
     try {
-      const group = await db.getGroup(security.sanitizeString(req.body?.groupId, 100));
-      if (!group) return res.status(404).json({ error: 'Group not found' });
-      const actor = authorizedRoomMember(req, group);
-      if (!actor) return res.status(401).json({ error: 'A valid group membership is required' });
-      const updated = processGroupBillAction(group, req.body?.action, req.body?.payload, actor);
-      const bill = updated.bills.find((candidate) => candidate.id === req.body.payload.billId);
-      const liveSession = bill?.sessionId ? await db.getSession(bill.sessionId) : null;
-      if (liveSession) {
-        liveSession.items = bill.items;
-        await db.saveGroupAndSession(updated, liveSession);
-        global.broadcastSessionState(liveSession.id);
-      } else {
-        await db.saveGroup(updated);
-      }
+      const groupId = security.sanitizeString(req.body?.groupId, 100);
+      const billId = security.sanitizeString(req.body?.payload?.billId, 100);
+      const mutation = await db.transactGroupAndLinkedSession(
+        groupId,
+        (group) => group.bills?.find((candidate) => candidate.id === billId)?.sessionId || '',
+        (group, liveSession) => {
+          const actor = authorizedRoomMember(req, group);
+          if (!actor) {
+            const error = new Error('A valid group membership is required');
+            error.statusCode = 401;
+            throw error;
+          }
+          const actionId = security.sanitizeString(req.body?.actionId || '', 100);
+          if (actionId && Array.isArray(group.processedActionIds) && group.processedActionIds.includes(actionId)) {
+            return { group, session: liveSession, idempotentReplay: true };
+          }
+          if (liveSession?.members?.some((member) => member.active !== false && member.settled === true)) {
+            const error = new Error('Payment allocations are locked while a member is marked paid');
+            error.statusCode = 409;
+            throw error;
+          }
+          const previousRevision = Number(group.bills?.find((candidate) => candidate.id === billId)?.revision || 0);
+          const updatedGroup = processGroupBillAction(group, req.body?.action, req.body?.payload, actor);
+          if (actionId) {
+            updatedGroup.processedActionIds = [...new Set([...(updatedGroup.processedActionIds || []), actionId])].slice(-50);
+          }
+          const bill = updatedGroup.bills.find((candidate) => candidate.id === billId);
+          if (bill) bill.revision = previousRevision + 1;
+          if (bill?.reconciliation) {
+            bill.reconciliation = reconcileReceipt(bill);
+            bill.assessment = assessReceipt(bill, {
+              source: bill.ocr?.source || 'confirmed-scan',
+              imageQuality: bill.imageQuality,
+              confirmedByUser: Boolean(bill.confirmedByUserAt),
+            });
+          }
+          if (liveSession && bill) {
+            liveSession.items = bill.items;
+            liveSession.payerId = bill.payerId;
+            if (bill.reconciliation) {
+              liveSession.reconciliation = bill.reconciliation;
+              liveSession.assessment = bill.assessment;
+            }
+          }
+          return { group: updatedGroup, session: liveSession };
+        },
+      );
+      if (!mutation) return res.status(404).json({ error: 'Group not found' });
+      const updated = mutation.group;
+      const liveSession = mutation.session;
+      if (liveSession) global.broadcastSessionState(liveSession.id);
       global.broadcastGroupState(updated.id);
       return res.json({ success: true, group: publicGroupWithDebt(updated) });
     } catch (err) {
@@ -903,7 +1656,7 @@ app.prepare().then(() => {
     const cleanPhone = (phone || '').replace(/\D/g, '');
     if (userId) {
       const match = memberList.some((member) => (member.id === userId || member.userId === userId || member.uid === userId) && member.active !== false);
-      if (match) return true;
+      return match;
     }
     return memberList.some((member) => {
       if (member.active === false) return false;
@@ -919,7 +1672,7 @@ app.prepare().then(() => {
     const cleanPhone = (phone || '').replace(/\D/g, '');
     if (userId) {
       const match = memberList.find((member) => (member.id === userId || member.userId === userId || member.uid === userId) && member.active !== false);
-      if (match) return match;
+      return match || null;
     }
     return memberList.find((member) => {
       if (member.active === false) return false;
@@ -929,24 +1682,34 @@ app.prepare().then(() => {
     }) || null;
   }
 
-  function calculateUserShareForSession(itemsList, memberList, userId, userName, phone, tipPercentage = 0) {
+  function calculateUserShareForSession(itemsList, memberList, userId, userName, phone, tipPercentage = 0, payableTotal = null) {
     const items = Array.isArray(itemsList) ? itemsList : [];
     const members = Array.isArray(memberList) ? memberList : [];
     if (items.length === 0 || members.length === 0) return 0;
 
-    const targetMember = userId ? members.find((member) => member.id === userId) : null;
+    const memberIds = members.filter((member) => member?.id && member.active !== false).map((member) => member.id);
+    const targetMember = userId ? members.find((member) => member.id === userId && member.active !== false) : null;
     if (!targetMember) return 0;
-    const validMemberIds = new Set(members.map((member) => member.id));
-    let shareCents = 0;
-    items.forEach((item) => {
+    const validMemberIds = new Set(memberIds);
+    const itemWeights = items.map((item) => toCents(item.price));
+    const itemTotalCents = itemWeights.reduce((sum, cents) => sum + cents, 0);
+    const payableCents = toCents(payableTotal) || itemTotalCents;
+    const allocatedItemCents = allocateCentsProportionally(payableCents, itemWeights);
+    const sharesByMember = new Map(memberIds.map((memberId) => [memberId, 0]));
+    items.forEach((item, index) => {
       const claimantIds = [...new Set(
         (Array.isArray(item.claimedBy) ? item.claimedBy : []).filter((id) => validMemberIds.has(id))
       )];
-      const targetShare = splitCents(toCents(item.price), claimantIds)
-        .find((share) => share.memberId === targetMember.id);
-      shareCents += targetShare?.cents || 0;
+      splitCents(allocatedItemCents[index], claimantIds).forEach(({ memberId, cents }) => {
+        sharesByMember.set(memberId, (sharesByMember.get(memberId) || 0) + cents);
+      });
     });
-    return Math.round(shareCents * (1 + Number(tipPercentage || 0) / 100)) / 100;
+    const tippedShares = allocateTipAdjustedCents(
+      memberIds.map((memberId) => sharesByMember.get(memberId) || 0),
+      tipPercentage,
+    );
+    const targetIndex = memberIds.indexOf(targetMember.id);
+    return targetIndex >= 0 ? tippedShares[targetIndex] / 100 : 0;
   }
 
   // POST /api/user/sync - Synchronize/register user account & settings
@@ -981,24 +1744,22 @@ app.prepare().then(() => {
   });
 
   // GET /api/user/groups - Get active groups for a specific user
-  server.get('/api/user/groups', authenticateUser, async (req, res) => {
+  server.get('/api/user/groups', authenticateUser, accountReadRateLimit, accountReadAdmission, async (req, res) => {
     try {
-      let uid = null;
-      let userName = '';
-      let phone = '';
+      if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+      const uid = req.user.uid;
+      const user = await db.getUserByUid(uid);
+      const userName = user ? user.username : '';
+      const phone = user ? user.phone : '';
 
-      if (req.user) {
-        uid = req.user.uid;
-        const user = await db.getUserByUid(uid);
-        userName = user ? user.username : '';
-        phone = user ? user.phone : '';
-      } else {
-        userName = security.sanitizeString(req.query.userName || '', 50);
-        phone = security.sanitizeString(req.query.phone || '', 20);
-      }
-
-      const allGroups = Object.values(await db.getAllGroups() || {});
-      const userGroups = allGroups.filter((g) => isUserMember(g.members, userName, phone, uid));
+      const cursor = Math.max(0, Math.min(200, Math.round(Number(req.query?.cursor) || 0)));
+      const orderedGroupIds = [...(Array.isArray(user?.groups) ? user.groups : [])].reverse().slice(0, 200);
+      const groupIds = orderedGroupIds.slice(cursor, cursor + 20);
+      const userGroups = (await Promise.all(groupIds.map((groupId) => db.getGroup(groupId))))
+        .filter((group) => group && isUserMember(group.members, userName, phone, uid));
+      const nextCursor = cursor + groupIds.length < orderedGroupIds.length
+        ? cursor + groupIds.length
+        : null;
 
       return res.json({
         success: true,
@@ -1008,7 +1769,8 @@ app.prepare().then(() => {
           name: g.name,
           currency: g.currency,
           membersCount: g.members ? g.members.length : 0
-        }))
+        })),
+        nextCursor,
       });
     } catch (err) {
       console.error('Error fetching user groups:', err);
@@ -1017,117 +1779,127 @@ app.prepare().then(() => {
   });
 
   // GET /api/history - Get user payments (strictly isolated by user identity)
-  server.get('/api/history', authenticateUser, async (req, res) => {
+  server.get('/api/history', authenticateUser, accountReadRateLimit, accountReadAdmission, async (req, res) => {
     try {
-      let uid = null;
-      let userName = '';
-      let phone = '';
-      let hiddenHistoryIds = new Set();
+      if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+      const uid = req.user.uid;
+      const user = await db.getUserByUid(uid);
+      const userName = user ? user.username : '';
+      const phone = user ? user.phone : '';
+      const hiddenHistoryIds = new Set(Array.isArray(user?.hiddenHistoryIds) ? user.hiddenHistoryIds : []);
+      const cursorState = decodeHistoryCursor(req.query?.cursor);
+      if (!cursorState) return res.status(400).json({ error: 'Invalid history cursor' });
+      if (cursorState.emitted >= 200) return res.json({ success: true, history: [], nextCursor: null });
 
-      if (req.user) {
-        uid = req.user.uid;
-        const user = await db.getUserByUid(uid);
-        userName = user ? user.username : '';
-        phone = user ? user.phone : '';
-        hiddenHistoryIds = new Set(Array.isArray(user?.hiddenHistoryIds) ? user.hiddenHistoryIds : []);
-      } else {
-        userName = security.sanitizeString(req.query.userName || '', 50);
-        phone = security.sanitizeString(req.query.phone || '', 20);
-      }
+      const summarizeHistory = (histItem) => {
+        if (!histItem?.id || hiddenHistoryIds.has(histItem.id)) return null;
+        const effectiveMembers = Array.isArray(histItem.members) ? histItem.members : [];
+        const effectiveItems = Array.isArray(histItem.items) ? histItem.items : [];
+        if (!isUserMember(effectiveMembers, userName, phone, uid)) return null;
 
-      const standaloneHistory = await db.getHistory() || [];
-      const allGroups = Object.values(await db.getAllGroups() || {});
-      const groupBillsHistory = [];
-
-      // 1. Group Bills
-      const userGroups = allGroups.filter((g) => isUserMember(g.members, userName, phone, uid));
-
-      userGroups.forEach((group) => {
-        if (Array.isArray(group.bills)) {
-          const userMember = getUserMember(group.members, userName, phone, uid);
-          const userId = userMember ? userMember.id : null;
-
-          group.bills.forEach((bill) => {
-            if (hiddenHistoryIds.has(bill.id)) return;
-            const payerMember = Array.isArray(group.members)
-              ? group.members.find((m) => m.id === bill.payerId || m.name === bill.payerId)
-              : null;
-            const payerName = bill.payerId === 'each'
-              ? 'Each paid their own share'
-              : (payerMember ? payerMember.name : (bill.payerId || 'Group Member'));
-
-            let userShare = 0;
-            const billItems = Array.isArray(bill.items) ? bill.items : [];
-            if (billItems.length > 0 && userMember) {
-              userShare = calculateUserShareForSession(billItems, group.members, userId, userName, phone);
-            } else {
-              const total = typeof bill.amount === 'number' ? bill.amount : parseFloat(bill.amount) || 0;
-              userShare = total / (group.members.length || 1);
-            }
-
-            groupBillsHistory.push({
-              id: bill.id || `group_bill_${Date.now()}_${Math.random()}`,
-              storeName: bill.title || 'Group Bill',
-              date: bill.date || new Date().toISOString().split('T')[0],
-              totalAmount: typeof bill.amount === 'number' ? bill.amount : parseFloat(bill.amount) || 0,
-              userShare: Math.round(userShare * 100) / 100,
-              currency: bill.currency || group.currency || 'NIS',
-              membersCount: group.members ? group.members.length : 2,
-              isGroupBill: true,
-              groupName: group.name,
-              groupId: group.id,
-              payerName: payerName,
-              sessionId: bill.sessionId || `sess_g_${bill.id}`
-            });
-          });
+        let userShare = typeof histItem.totalAmount === 'number'
+          ? histItem.totalAmount
+          : parseFloat(histItem.totalAmount) || 0;
+        const userMember = getUserMember(effectiveMembers, userName, phone, uid);
+        if (effectiveItems.length > 0 && userMember) {
+          userShare = calculateUserShareForSession(
+            effectiveItems,
+            effectiveMembers,
+            userMember.id,
+            userName,
+            phone,
+            histItem.tipPercentage || 0,
+            optionalReceiptAmount(histItem.payableSubtotal),
+          );
+        } else if (effectiveMembers.length > 0) {
+          userShare /= effectiveMembers.length;
         }
-      });
 
-      // 2. Standalone Session History
-      const processedStandalone = [];
+        return {
+          id: histItem.id,
+          storeName: histItem.storeName || 'Bill Session',
+          date: histItem.date || new Date().toISOString().split('T')[0],
+          currency: histItem.currency || 'NIS',
+          totalAmount: typeof histItem.totalAmount === 'number'
+            ? histItem.totalAmount
+            : parseFloat(histItem.totalAmount) || 0,
+          userShare: Math.round(userShare * 100) / 100,
+          membersCount: effectiveMembers.length || histItem.membersCount || 1,
+          createdAt: histItem.createdAt || 0,
+          settledAt: histItem.settledAt || histItem.createdAt || 0,
+          status: 'settled',
+          ...(histItem.groupId ? {
+            isGroupBill: true,
+            groupId: histItem.groupId,
+            ...(histItem.groupName ? { groupName: histItem.groupName } : {}),
+          } : {}),
+        };
+      };
 
-      for (const histItem of standaloneHistory) {
-        if (hiddenHistoryIds.has(histItem.id)) continue;
+      const pageLimit = Math.min(20, 200 - cursorState.emitted);
+      const page = [];
+      let source = cursorState.source;
+      let offset = cursorState.offset;
+      let hasMore = true;
 
-        const liveSession = await db.getSession(histItem.id);
-
-        const effectiveMembers = (liveSession && Array.isArray(liveSession.members) && liveSession.members.length > 0)
-          ? liveSession.members
-          : (Array.isArray(histItem.members) ? histItem.members : []);
-
-        const effectiveItems = (liveSession && Array.isArray(liveSession.items) && liveSession.items.length > 0)
-          ? liveSession.items
-          : (Array.isArray(histItem.items) ? histItem.items : []);
-
-        const isMember = isUserMember(effectiveMembers, userName, phone, uid);
-        if (!isMember) continue;
-
-        let userShare = typeof histItem.totalAmount === 'number' ? histItem.totalAmount : parseFloat(histItem.totalAmount) || 0;
-
-        if (effectiveMembers.length > 0) {
-          const userMem = getUserMember(effectiveMembers, userName, phone, uid);
-          if (effectiveItems.length > 0 && userMem) {
-            userShare = calculateUserShareForSession(effectiveItems, effectiveMembers, userMem.id, userName, phone);
+      while (page.length < pageLimit && hasMore) {
+        const remaining = pageLimit - page.length;
+        if (source === 'canonical') {
+          const canonicalRemaining = Math.max(0, 200 - offset);
+          if (canonicalRemaining === 0) {
+            source = 'legacy';
+            offset = 0;
+            continue;
+          }
+          const probeLimit = Math.min(remaining + 1, canonicalRemaining);
+          let canonicalPage;
+          if (typeof db.getHistoryPageForUser === 'function') {
+            canonicalPage = await db.getHistoryPageForUser(uid, probeLimit, offset);
           } else {
-            userShare = userShare / effectiveMembers.length;
+            const slots = await db.getHistoryForUser(uid, probeLimit, offset);
+            canonicalPage = { slots, rawCount: slots.length };
+          }
+          const slots = Array.isArray(canonicalPage?.slots) ? canonicalPage.slots : [];
+          const rawCount = Number.isInteger(canonicalPage?.rawCount) ? canonicalPage.rawCount : slots.length;
+          const consumed = Math.min(remaining, rawCount);
+          for (const entry of slots.slice(0, consumed)) {
+            const summary = summarizeHistory(entry);
+            if (summary) page.push(summary);
+          }
+          offset += consumed;
+          if (rawCount > consumed) break;
+          source = 'legacy';
+          offset = 0;
+          continue;
+        }
+
+        const legacyHistory = [...(Array.isArray(user?.bills) ? user.bills : [])]
+          .filter((entry, index, entries) => entry?.id && entries.findIndex((candidate) => candidate?.id === entry.id) === index)
+          .sort((first, second) => Number(second.settledAt || second.createdAt || 0) - Number(first.settledAt || first.createdAt || 0));
+        const legacyLimit = Math.min(200, legacyHistory.length);
+        while (page.length < pageLimit && offset < legacyLimit) {
+          const batchSize = Math.min(Math.max((pageLimit - page.length) * 2, 20), legacyLimit - offset);
+          const candidates = legacyHistory.slice(offset, offset + batchSize);
+          const indexedIds = typeof db.getResolvableHistoryPointerIds === 'function'
+            ? await db.getResolvableHistoryPointerIds(uid, candidates.map((entry) => entry.id))
+            : [];
+          const indexedIdSet = new Set(indexedIds);
+          for (const entry of candidates) {
+            offset += 1;
+            if (indexedIdSet.has(entry.id)) continue;
+            const summary = summarizeHistory(entry);
+            if (summary) page.push(summary);
+            if (page.length >= pageLimit) break;
           }
         }
-
-        processedStandalone.push({
-          ...histItem,
-          membersCount: effectiveMembers.length > 0 ? effectiveMembers.length : (histItem.membersCount || 1),
-          userShare: Math.round(userShare * 100) / 100
-        });
+        hasMore = offset < legacyLimit;
       }
 
-      const combinedHistory = [...processedStandalone, ...groupBillsHistory];
-      combinedHistory.sort((a, b) => {
-        const timeA = a.createdAt || (a.date ? new Date(a.date).getTime() : 0);
-        const timeB = b.createdAt || (b.date ? new Date(b.date).getTime() : 0);
-        return timeB - timeA;
-      });
-
-      return res.json({ success: true, history: combinedHistory });
+      const emitted = cursorState.emitted + page.length;
+      const nextCursor = hasMore && emitted < 200
+        ? encodeHistoryCursor(source, offset, emitted)
+        : null;
+      return res.json({ success: true, history: page, nextCursor });
     } catch (err) {
       console.error('Error fetching history:', err);
       return res.status(500).json({ error: 'Failed to fetch history' });
@@ -1161,7 +1933,7 @@ app.prepare().then(() => {
         return res.status(403).json({ error: 'Only the bill creator or group host can delete this bill' });
       }
 
-      const group = await db.deleteGroupBill(groupId, billId);
+      const group = await db.deleteGroupBill(groupId, billId, actor.id);
       if (!group) {
         return res.status(404).json({ error: 'Group or bill not found' });
       }
@@ -1178,13 +1950,53 @@ app.prepare().then(() => {
     }
   });
 
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }, 30_000);
+  heartbeat.unref?.();
+  wss.on('close', () => clearInterval(heartbeat));
+
   wss.on('connection', (ws) => {
     ws.subscriptions = new Set();
+    ws.roomAuthorizations = new Map();
+    ws.isAlive = true;
+    ws.messageWindowStartedAt = Date.now();
+    ws.messageCount = 0;
+    ws.messageInFlight = false;
+    ws.on('pong', () => { ws.isAlive = true; });
+    ws.once('close', () => {
+      const clientIp = ws.clientIp || 'unknown';
+      const remaining = Math.max(0, (wsConnectionsByIp.get(clientIp) || 1) - 1);
+      if (remaining) wsConnectionsByIp.set(clientIp, remaining);
+      else wsConnectionsByIp.delete(clientIp);
+    });
     ws.on('error', (err) => {
       console.warn('⚠️ WebSocket client connection error:', err.message);
     });
 
     ws.on('message', async (message) => {
+      const now = Date.now();
+      if (now - ws.messageWindowStartedAt >= 60_000) {
+        ws.messageWindowStartedAt = now;
+        ws.messageCount = 0;
+      }
+      ws.messageCount += 1;
+      if (ws.messageCount > 20) {
+        ws.close(1008, 'Message rate exceeded');
+        return;
+      }
+      if (ws.messageInFlight) {
+        ws.send(JSON.stringify({ type: 'ERROR', error: 'Wait for the previous subscription request' }));
+        return;
+      }
+      ws.messageInFlight = true;
       try {
         if (message.length > 10_000) {
           ws.close(1009, 'Message too large');
@@ -1192,29 +2004,49 @@ app.prepare().then(() => {
         }
         const data = JSON.parse(message.toString());
         const { type, sessionId, groupId, accessToken } = data;
+        if (typeof accessToken !== 'string' || accessToken.length < 20 || accessToken.length > 200 || !/^[a-z0-9_\-]+$/i.test(accessToken)) {
+          ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid subscription credentials' }));
+          return;
+        }
+        if (ws.subscriptions.size >= 4) {
+          ws.close(1008, 'Subscription limit exceeded');
+          return;
+        }
 
         if (type === 'SUBSCRIBE_GROUP' && groupId) {
           const sanitizedId = security.sanitizeString(groupId, 100);
-          const group = await db.getGroup(sanitizedId);
-          if (!group) {
+          if (!security.isValidGroupId(sanitizedId)) {
             ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid group subscription' }));
             return;
           }
-          subscribeClient(ws, 'group', group.id);
-          if (group.code) subscribeClient(ws, 'group', group.code);
+          const group = await db.getGroup(sanitizedId);
+          const member = group ? findRoomMember(group, { accessToken }) : null;
+          if (!group || !member) {
+            ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid group subscription' }));
+            return;
+          }
+          const authorization = { memberId: member.id, tokenHash: hashAccessToken(accessToken) };
+          subscribeClient(ws, 'group', group.id, authorization);
+          if (group.code) subscribeClient(ws, 'group', group.code, authorization);
           ws.send(JSON.stringify({ type: 'GROUP_UPDATE', group: publicGroupWithDebt(group) }));
           return;
         }
 
         if (type === 'SUBSCRIBE' && sessionId) {
           const sanitizedId = security.sanitizeString(sessionId, 100);
-          const session = await db.getSession(sanitizedId);
-          if (!session) {
+          if (!security.isValidSessionId(sanitizedId)) {
             ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid session subscription' }));
             return;
           }
-          subscribeClient(ws, 'session', session.id);
-          if (session.code) subscribeClient(ws, 'session', session.code);
+          const session = await db.getSession(sanitizedId);
+          const member = session ? findRoomMember(session, { accessToken }) : null;
+          if (!session || !member) {
+            ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid session subscription' }));
+            return;
+          }
+          const authorization = { memberId: member.id, tokenHash: hashAccessToken(accessToken) };
+          subscribeClient(ws, 'session', session.id, authorization);
+          if (session.code) subscribeClient(ws, 'session', session.code, authorization);
           ws.send(JSON.stringify({ type: 'SESSION_UPDATE', session: publicRoom(session) }));
           return;
         }
@@ -1224,7 +2056,9 @@ app.prepare().then(() => {
         }
 
       } catch (err) {
-        ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid WebSocket message' }));
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid WebSocket message' }));
+      } finally {
+        ws.messageInFlight = false;
       }
     });
   });

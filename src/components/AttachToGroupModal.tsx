@@ -95,14 +95,14 @@ export const AttachToGroupModal: React.FC<AttachToGroupModalProps> = ({
           ) : (
             <div className="space-y-1.5">
               <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                {t('enterGroupCodeLabel', undefined, 'Enter 4-Digit Group Code')}
+                {t('enterGroupCodeLabel', undefined, 'Enter 8-Digit Group Code')}
               </label>
               <input
                 type="text"
-                maxLength={4}
+                maxLength={8}
                 value={customGroupCode}
                 onChange={(e) => setCustomGroupCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="e.g. 8492"
+                placeholder={t('enterGroupCodePlaceholder', undefined, 'Enter 8-digit group code')}
                 className="w-full py-2.5 px-3.5 rounded-xl photo-input text-center text-lg font-mono font-extrabold tracking-widest bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
               />
             </div>
@@ -119,7 +119,7 @@ export const AttachToGroupModal: React.FC<AttachToGroupModalProps> = ({
 
             <button
               type="submit"
-              disabled={!selectedGroupId && customGroupCode.length < 4}
+              disabled={!selectedGroupId && !/^\d{8}$/.test(customGroupCode)}
               className="flex-1 py-2.5 rounded-full bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-black text-xs hover:bg-slate-900 dark:hover:bg-slate-200 flex items-center justify-center gap-1.5 shadow-md active:scale-95 disabled:opacity-40"
             >
               <span>{t('attachBtn', undefined, 'Attach Bill 🔗')}</span>

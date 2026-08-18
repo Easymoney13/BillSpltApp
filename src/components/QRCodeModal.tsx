@@ -11,6 +11,7 @@ interface QRCodeModalProps {
   sessionCode: string;
   sessionId: string;
   isGroup?: boolean;
+  hideCode?: boolean;
   onAddFriend?: (friendName: string) => void;
 }
 
@@ -20,6 +21,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   sessionCode,
   sessionId,
   isGroup = false,
+  hideCode = false,
   onAddFriend
 }) => {
   const { t, isRtl } = useLanguage();
@@ -82,8 +84,8 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join BillSplit Session #${sessionCode}`,
-          text: `Join our bill splitting room with code ${sessionCode}!`,
+          title: hideCode ? 'Join BillSplit' : `Join BillSplit Session #${sessionCode}`,
+          text: hideCode ? t('secureGroupInviteText', undefined, 'Join our bill splitting room with this secure link.') : `Join our bill splitting room with code ${sessionCode}!`,
           url: joinUrl,
         });
       } catch (err) {
@@ -126,9 +128,9 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
           <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
             {t('shareRoomTitle', undefined, 'Invite Friends to Room')}
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+          {!hideCode && <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
             Room Code: <span className="font-mono font-black text-indigo-600 dark:text-indigo-400">#{sessionCode}</span>
-          </p>
+          </p>}
         </div>
 
         {/* 3 Option Selector Tabs */}
@@ -179,7 +181,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               {qrDataUrl ? (
                 <img
                   src={qrDataUrl}
-                  alt={`QR Code for session ${sessionCode}`}
+                  alt={hideCode ? t('secureGroupQrAlt', undefined, 'QR code for secure group invite') : `QR Code for session ${sessionCode}`}
                   className="w-44 h-44 object-contain rounded-xl shadow-xs"
                 />
               ) : (
