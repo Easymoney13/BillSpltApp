@@ -1,9 +1,23 @@
-import { createWorker } from 'tesseract.js';
+import { createWorker, PSM } from 'tesseract.js';
+import { assessOcrReadability, haveSamePurchasedRows, inferDocumentLanguage, normalizeOcrName } from './ocrQuality';
+import { reconstructReceiptRows } from './ocrRows';
+import { reconcileReceipt } from './receiptMath';
 
 export interface ParsedBill {
   storeName: string;
   date: string;
   currency: string;
+  receiptTotal?: number | null;
+  documentLanguage?: 'hebrew' | 'english' | 'mixed' | 'unknown';
+  ocrQuality?: {
+    readable: boolean;
+    score: number;
+    language: string;
+    hebrewCharacterRatio: number;
+    hebrewLineRatio: number;
+    reasons: string[];
+  };
+  ocr?: Record<string, any>;
   items: Array<{
     id: string;
     name: string;
@@ -26,7 +40,10 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
   let timedOut = false;
   const deadline = Date.now() + Math.max(1_000, timeoutMs);
   try {
-    const workerPromise = createWorker(['eng', 'heb']);
+    // Hebrew comes first intentionally. Tesseract language order changes the
+    // recognition result, and an English-first pass systematically damages
+    // short Hebrew thermal-print words.
+    const workerPromise = createWorker(['heb', 'eng']);
     const initializationTimeout = new Promise<null>((resolve) => {
       timeout = setTimeout(() => {
         timedOut = true;
@@ -46,17 +63,148 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
       timedOut = true;
       void worker?.terminate().catch(() => {});
     }, remaining);
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+      preserve_interword_spaces: '1',
+      user_defined_dpi: '300',
+    });
     const parsedParts: ParsedBill[] = [];
+    const confidences: number[] = [];
+    let verifiedHebrewParts = 0;
     for (const imageSource of imageSources.slice(0, 6)) {
       if (timedOut || Date.now() >= deadline) return null;
-      const ret = await worker.recognize(imageSource);
-      const parsed = parseReceiptText(ret.data.text);
-      if (parsed?.items?.length) parsedParts.push(parsed);
+      let ret = await worker.recognize(imageSource, {}, { text: true, blocks: true });
+      let receiptText = reconstructReceiptRows(ret.data.blocks) || ret.data.text;
+      let parsed = parseReceiptText(receiptText);
+      let quality = parsed
+        ? assessOcrReadability(parsed, {
+            expectedLanguage: /[\u0590-\u05ff]/.test(receiptText) || /₪|ש["״']?ח/.test(receiptText) ? 'hebrew' : undefined,
+            sourceText: receiptText,
+            confidence: ret.data.confidence,
+          })
+        : null;
+
+      const firstLanguageIsHebrew = /[\u0590-\u05ff]/.test(receiptText)
+        || /₪|ש["״']?ח/.test(receiptText)
+        || /(?:×[^\x00-\x7f]){2,}/.test(receiptText);
+      let hebrewNameVerified = !firstLanguageIsHebrew;
+      if (firstLanguageIsHebrew && parsed && deadline - Date.now() >= 5_000) {
+        // Use three bounded reads with distinct language configurations:
+        // Hebrew+English for layout, English for digits, and Hebrew-only for
+        // an exact item-name verification. A disagreement is never displayed.
+        await worker.reinitialize('eng');
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+        });
+        const numericRet = await worker.recognize(imageSource, {}, { text: true, blocks: true });
+        const mergedText = reconstructReceiptRows(ret.data.blocks, numericRet.data.blocks) || receiptText;
+        const mergedParsed = parseReceiptText(mergedText);
+        const mergedQuality = mergedParsed
+          ? assessOcrReadability(mergedParsed, {
+              expectedLanguage: 'hebrew',
+              sourceText: mergedText,
+              confidence: ret.data.confidence,
+            })
+          : null;
+        await worker.reinitialize('heb');
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+        });
+        const hebrewRet = await worker.recognize(imageSource, {}, { text: true, blocks: true });
+        const hebrewText = reconstructReceiptRows(hebrewRet.data.blocks, numericRet.data.blocks) || hebrewRet.data.text;
+        const hebrewParsed = parseReceiptText(hebrewText);
+        const mergedReconciliation = mergedParsed ? reconcileReceipt(mergedParsed) : null;
+        if (mergedQuality?.readable
+          && mergedReconciliation?.receiptTotal !== null
+          && !mergedReconciliation?.needsReview
+          && haveSamePurchasedRows(mergedParsed, hebrewParsed)) {
+          parsed = mergedParsed;
+          quality = mergedQuality;
+          receiptText = mergedText;
+          hebrewNameVerified = true;
+        } else {
+          parsed = null;
+          quality = null;
+        }
+        await worker.reinitialize('heb+eng');
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+        });
+      }
+
+      // Sparse text is strong for separated receipt rows. A bounded second
+      // pass recovers dense POS layouts, but only when the first pass failed
+      // the language/readability gate.
+      if (!firstLanguageIsHebrew && (!parsed || !quality?.readable) && deadline - Date.now() >= 2_500) {
+        await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+        const blockRet = await worker.recognize(imageSource, {}, { text: true, blocks: true });
+        const blockText = reconstructReceiptRows(blockRet.data.blocks) || blockRet.data.text;
+        const blockParsed = parseReceiptText(blockText);
+        const blockQuality = blockParsed
+          ? assessOcrReadability(blockParsed, {
+              expectedLanguage: /[\u0590-\u05ff]/.test(blockText) || /₪|ש["״']?ח/.test(blockText) ? 'hebrew' : undefined,
+              sourceText: blockText,
+              confidence: blockRet.data.confidence,
+            })
+          : null;
+        if ((blockQuality?.score || 0) > (quality?.score || 0)) {
+          ret = blockRet;
+          receiptText = blockText;
+          parsed = blockParsed;
+          quality = blockQuality;
+        }
+        await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
+      }
+
+      if (parsed?.items?.length && quality?.readable && hebrewNameVerified) {
+        parsedParts.push(parsed);
+        confidences.push(Number(ret.data.confidence) || 0);
+        if (firstLanguageIsHebrew) verifiedHebrewParts += 1;
+      }
     }
     if (parsedParts.length === 0) return null;
-    return {
+    const receipt = {
       ...parsedParts[0],
+      receiptTotal: [...parsedParts].reverse().find((part) => Number.isFinite(part.receiptTotal))?.receiptTotal ?? null,
       items: parsedParts.flatMap((part) => part.items).slice(0, 250),
+    };
+    const averageConfidence = confidences.length
+      ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length
+      : 0;
+    const documentLanguage = inferDocumentLanguage(receipt) as ParsedBill['documentLanguage'];
+    const quality = assessOcrReadability(receipt, {
+      expectedLanguage: documentLanguage,
+      confidence: averageConfidence,
+    });
+    if (!quality.readable) return null;
+    const reconciliation = reconcileReceipt(receipt);
+    if (
+      (documentLanguage === 'hebrew' || documentLanguage === 'mixed')
+      && (reconciliation.receiptTotal === null || reconciliation.needsReview)
+    ) {
+      return null;
+    }
+    return {
+      ...receipt,
+      documentLanguage,
+      ocrQuality: quality,
+      ocr: {
+        source: 'client-tesseract',
+        verificationStatus: 'manual-review-required',
+        documentLanguage,
+        readabilityScore: quality.score,
+        hebrewCharacterRatio: quality.hebrewCharacterRatio,
+        confidence: Math.round(averageConfidence * 10) / 10,
+        nameVerificationStatus: verifiedHebrewParts > 0
+          ? 'dual-hebrew-pass-agreement'
+          : 'not-required',
+      },
     };
   } catch (err) {
     if (timedOut) return null;
@@ -71,7 +219,12 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
 export async function scanBillImageRawText(imageSrc: string): Promise<string | null> {
   let worker: any = null;
   try {
-    worker = await createWorker(['eng', 'heb']);
+    worker = await createWorker(['heb', 'eng']);
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+      preserve_interword_spaces: '1',
+      user_defined_dpi: '300',
+    });
     const ret = await worker.recognize(imageSrc);
     return ret.data.text || null;
   } catch (err) {
@@ -108,6 +261,21 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
     .filter((l) => l.length > 0);
 
   if (lines.length === 0) return null;
+
+  let receiptTotal: number | null = null;
+  const finalTotalLabel = /(?:grand\s+total|amount\s+due|total\s+due|final\s+total|לתשלום|סה["״']?כ|סך\s+הכ[ו]?ל|סכום\s+כולל)/i;
+  for (const line of lines) {
+    const numericMatches = [...line.matchAll(/\b(\d+(?:[.,]\d{1,2})?)\b/g)];
+    if (!numericMatches.length) continue;
+    const label = line
+      .replace(/\b\d+(?:[.,]\d{1,2})?\b/g, ' ')
+      .replace(/[£$₪€:_=|\\/#-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!finalTotalLabel.test(label)) continue;
+    const value = Number(numericMatches.at(-1)?.[1].replace(',', '.'));
+    if (Number.isFinite(value) && value > 0 && value <= 50_000) receiptTotal = value;
+  }
 
   // 1. Store Name Detection
   let storeName = 'Scanned Receipt';
@@ -210,7 +378,7 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
       // Remove all numbers, punctuation, and isolate item name
       const nameCleaned = line.replace(/\b\d+(?:[.,]\d{1,2})?\b/g, '').replace(/[-_+=|\\/#]/g, ' ').trim();
       if (nameCleaned.length >= 2 && !noiseRegex.test(nameCleaned)) {
-        rawName = nameCleaned;
+        rawName = normalizeOcrName(nameCleaned);
         foundMatch = true;
       }
     }
@@ -219,7 +387,7 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
       // Pattern 1: Right-aligned price
       const matchRight = line.match(/^(.*?)(?:[£$₪€\s]+)(\d+(?:[.,]\d{1,2})?)\s*(?:[A-Za-z\u0590-\u05FF]{1,3})?\s*$/);
       if (matchRight && matchRight[1].trim().length >= 2) {
-        rawName = matchRight[1].trim();
+        rawName = normalizeOcrName(matchRight[1]);
         priceVal = parseFloat(matchRight[2].replace(',', '.'));
         foundMatch = true;
       } else {
@@ -227,7 +395,7 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
         const matchLeft = line.match(/^(\d+(?:[.,]\d{1,2})?)\s+(.+)$/);
         if (matchLeft && matchLeft[2].trim().length >= 2 && !/^\d+$/.test(matchLeft[2])) {
           priceVal = parseFloat(matchLeft[1].replace(',', '.'));
-          rawName = matchLeft[2].trim();
+          rawName = normalizeOcrName(matchLeft[2]);
           foundMatch = true;
         }
       }
@@ -242,7 +410,7 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
         rawName = qtyMatch[2].trim();
       }
 
-      rawName = rawName.replace(/^[^\w\u0590-\u05FF]+/, '').trim();
+      rawName = normalizeOcrName(rawName.replace(/^[^\w\u0590-\u05FF]+/, ''));
 
       let category = 'Food';
       if (/(coke|peroni|juice|beer|coffee|drink|tea|water|wine|soda|beverage|שתיה|בירה|קפה|מיץ|קולה)/i.test(rawName)) {
@@ -271,6 +439,7 @@ export function parseReceiptText(rawText: string): ParsedBill | null {
     storeName,
     date: dateStr,
     currency,
+    receiptTotal,
     items,
   };
 }

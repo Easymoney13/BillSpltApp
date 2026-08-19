@@ -10,6 +10,16 @@ export interface ReceiptDraftResult {
   usedLocalFallback: boolean;
 }
 
+export function receiptScanUserMessage(
+  translate: (key: string, params?: Record<string, any>, fallback?: string) => string,
+): string {
+  return translate(
+    'couldNotParse',
+    undefined,
+    'Could not read this receipt reliably. Please retake a clear, well-lit photo or enter the items manually.',
+  );
+}
+
 function createScanId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -85,14 +95,18 @@ export async function createReceiptDraft(
 
   // A local OCR result is a draft only. It never becomes an active bill until
   // the user reviews every row in the existing manual bill editor.
-  const localDraft = await scanBillImagesInBrowser(prepared.fallbackImages, 12_000);
+  const localDraft = await scanBillImagesInBrowser(prepared.fallbackImages, 18_000);
   if (localDraft?.items?.length) {
     return {
       receipt: {
         ...localDraft,
         reconciliation: { status: 'unverified_fallback', needsReview: true },
         assessment: { level: 'high', requiresUserConfirmation: true, reasons: ['local-ocr-fallback'] },
-        ocr: { source: 'client-tesseract', verificationStatus: 'manual-review-required' },
+        ocr: {
+          ...(localDraft.ocr || {}),
+          source: 'client-tesseract',
+          verificationStatus: 'manual-review-required',
+        },
       },
       scanId,
       recoveryToken,

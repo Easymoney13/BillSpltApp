@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Upload, Flashlight, RefreshCw, X } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
-import { createReceiptDraft } from '../../lib/receiptScanClient';
+import { createReceiptDraft, receiptScanUserMessage } from '../../lib/receiptScanClient';
 
 interface CameraViewfinderProps {
   onScanComplete: (receiptData: any) => void;
@@ -125,9 +125,7 @@ export const CameraViewfinder: React.FC<CameraViewfinderProps> = ({
       });
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error
-        ? err.message
-        : t('errorUploading', undefined, 'Network error while scanning receipt.'));
+      alert(receiptScanUserMessage(t));
     } finally {
       setIsScanning(false);
     }

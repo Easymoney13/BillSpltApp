@@ -16,6 +16,9 @@
 # build cache
 tsconfig.tsbuildinfo
 
+# local Tesseract.js language cache
+*.traineddata
+
 # scratch scripts
 scratch/
 
@@ -31,4 +34,3 @@ Thumbs.db
 
 # firebase secrets
 firebase-service-account.json
-

@@ -41,6 +41,7 @@ const {
 const { broadcastToRoom, subscribeClient } = require('./lib/realtimeRooms');
 const { reconcileReceipt, getReceiptPayableTotal, isTotalOrTaxLine } = require('./lib/receiptMath');
 const { assessReceipt } = require('./lib/receiptAssessment');
+const { assessOcrReadability, hasRequiredHebrewVerification, normalizeOcrName } = require('./lib/ocrQuality');
 const {
   normalizeScanId,
   normalizeRecoveryToken,
@@ -54,6 +55,10 @@ const { trackAnalyticsEvent } = require('./lib/analytics');
 const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
+
+if (!process.env.GEMINI_API_KEY) {
+  console.warn('⚠️ GEMINI_API_KEY is not configured. Server-side receipt OCR will reject image scans instead of returning unverified text.');
+}
 
 // Initialize Firebase Admin SDK
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || 'firebase-service-account.json';
@@ -344,7 +349,12 @@ app.prepare().then(() => {
   function sendRouteError(res, err, fallbackMessage) {
     const status = Number.isInteger(err?.statusCode) ? err.statusCode : 500;
     if (status >= 500) console.error(fallbackMessage, err);
-    return res.status(status).json({ error: status >= 500 ? fallbackMessage : err.message });
+    return res.status(status).json({
+      error: typeof err?.publicMessage === 'string'
+        ? err.publicMessage
+        : (status >= 500 ? fallbackMessage : err.message),
+      ...(typeof err?.errorCode === 'string' ? { errorCode: err.errorCode } : {}),
+    });
   }
 
   function createSessionHistoryRecord(session, groupName = '') {
@@ -583,8 +593,24 @@ app.prepare().then(() => {
 
     let parsedReceipt = null;
     if (rawText) {
+      if (!customGeminiKey && !process.env.GEMINI_API_KEY) {
+        const error = new Error('Gemini OCR is not configured');
+        error.name = 'OcrProviderUnavailableError';
+        error.statusCode = 503;
+        error.errorCode = 'OCR_PROVIDER_UNAVAILABLE';
+        error.publicMessage = 'Receipt scanning is temporarily unavailable. Please try again or enter the bill manually.';
+        throw error;
+      }
       parsedReceipt = await parseReceiptTextWithGemini(rawText, customGeminiKey);
     } else if (imageBase64Parts.length || imageBase64) {
+      if (!customGeminiKey && !process.env.GEMINI_API_KEY) {
+        const error = new Error('Gemini OCR is not configured');
+        error.name = 'OcrProviderUnavailableError';
+        error.statusCode = 503;
+        error.errorCode = 'OCR_PROVIDER_UNAVAILABLE';
+        error.publicMessage = 'Receipt scanning is temporarily unavailable. Please try again or enter the bill manually.';
+        throw error;
+      }
       parsedReceipt = await parseReceiptImage(
         imageBase64Parts.length ? imageBase64Parts : imageBase64,
         mimeType,
@@ -613,11 +639,33 @@ app.prepare().then(() => {
       || Object.values(normalizedAmounts).some((value) => value !== null)
     );
 
-    const filteredItems = (parsedReceipt.items || []).filter((item) => {
-      const name = item?.name || item?.description || '';
+    const filteredItems = (parsedReceipt.items || []).map((item) => ({
+      ...item,
+      name: normalizeOcrName(item?.name || item?.description || ''),
+    })).filter((item) => {
+      const name = item.name;
       return name && !isTotalOrTaxLine(name);
     });
     if (!filteredItems.length) return null;
+
+    if (hasReceiptEvidence) {
+      const readability = assessOcrReadability(
+        { ...parsedReceipt, items: filteredItems },
+        { expectedLanguage: parsedReceipt?.ocr?.documentLanguage || parsedReceipt?.documentLanguage },
+      );
+      if (!readability.readable) return null;
+      if (!hasRequiredHebrewVerification({
+        ...parsedReceipt,
+        documentLanguage: readability.language,
+        ocr: ocrEvidence,
+        items: filteredItems,
+      })) return null;
+      if (ocrEvidence) {
+        ocrEvidence.readabilityScore = readability.score;
+        ocrEvidence.documentLanguage = readability.language;
+        ocrEvidence.hebrewCharacterRatio = readability.hebrewCharacterRatio;
+      }
+    }
 
     const items = validateItems(filteredItems).map((item) => ({
       ...item,
@@ -669,6 +717,11 @@ app.prepare().then(() => {
       verificationModelName: security.sanitizeString(value.verificationModelName || '', 50),
       modelAttempts: Math.max(0, Math.min(10, Number(value.modelAttempts) || 0)),
       verificationStatus: security.sanitizeString(value.verificationStatus || '', 50),
+      documentLanguage: security.sanitizeString(value.documentLanguage || '', 12),
+      readabilityScore: Math.max(0, Math.min(1, Number(value.readabilityScore) || 0)),
+      hebrewCharacterRatio: Math.max(0, Math.min(1, Number(value.hebrewCharacterRatio) || 0)),
+      confidence: Math.max(0, Math.min(100, Number(value.confidence) || 0)),
+      nameVerificationStatus: security.sanitizeString(value.nameVerificationStatus || '', 40),
     };
   }
 

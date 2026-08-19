@@ -89,6 +89,19 @@ export interface PreparedReceiptImages {
   tiled: boolean;
 }
 
+function createTesseractReceiptImage(source: HTMLCanvasElement, quality = 0.86): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const context = canvas.getContext('2d');
+  if (!context) return source.toDataURL('image/jpeg', quality);
+  context.fillStyle = '#FFFFFF';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.filter = 'grayscale(100%) contrast(1.9) brightness(1.06)';
+  context.drawImage(source, 0, 0);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 function loadReceiptImage(fileOrBase64: File | string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -181,7 +194,7 @@ export async function prepareReceiptImages(fileOrBase64: File | string): Promise
     if (imageData.length > 4_200_000) throw new Error('Receipt photo is too detailed to upload. Please retake it closer and straighter.');
     return {
       images: [imageData],
-      fallbackImages: [imageData],
+      fallbackImages: [createTesseractReceiptImage(sourceCanvas, 0.9)],
       mimeType: 'image/jpeg',
       quality,
       tiled: false,
@@ -257,18 +270,10 @@ export async function prepareReceiptImages(fileOrBase64: File | string): Promise
     throw new Error('Receipt photo is too detailed to upload. Please retake it closer and straighter.');
   }
 
-  // Tesseract gets one continuous, bounded image. This avoids both duplicate
-  // rows from overlaps and lost rows where an arbitrary tile edge cuts text.
-  const fallbackScale = Math.min(1, 1100 / width, Math.sqrt(6_000_000 / Math.max(1, width * height)));
-  const fallbackCanvas = document.createElement('canvas');
-  fallbackCanvas.width = Math.max(1, Math.round(width * fallbackScale));
-  fallbackCanvas.height = Math.max(1, Math.round(height * fallbackScale));
-  const fallbackContext = fallbackCanvas.getContext('2d');
-  if (!fallbackContext) throw new Error('Could not prepare receipt fallback image');
-  fallbackContext.fillStyle = '#FFFFFF';
-  fallbackContext.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
-  fallbackContext.drawImage(sourceCanvas, 0, 0, fallbackCanvas.width, fallbackCanvas.height);
-  const fallbackImages = [fallbackCanvas.toDataURL('image/jpeg', 0.78)];
+  // Preserve the same non-overlapping row-safe sections for Tesseract. The
+  // former single 1100px-wide long image made small Hebrew glyphs collapse
+  // into one another and was the main source of locally generated gibberish.
+  const fallbackImages = tileCanvases.map((canvas) => createTesseractReceiptImage(canvas, 0.86));
 
   return { images, fallbackImages, mimeType: 'image/jpeg', quality, tiled: true };
 }

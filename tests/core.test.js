@@ -15,6 +15,15 @@ const { assessReceipt } = require('../lib/receiptAssessment');
 const { createStableScanEntityId, normalizeScanId, normalizeRecoveryToken, createAsyncGate, createExpiringPromiseCache } = require('../lib/ocrControl');
 const { processGroupBillAction } = require('../lib/groupActions');
 const security = require('../lib/security');
+const { reconstructReceiptRows } = require('../lib/ocrRows');
+const {
+  assessOcrReadability,
+  evaluateReceiptAccuracy,
+  HEBREW_OCR_ACCEPTANCE_TARGET,
+  haveSamePurchasedRows,
+  hasRequiredHebrewVerification,
+  normalizeOcrName,
+} = require('../lib/ocrQuality');
 
 function sampleSession() {
   return {
@@ -345,6 +354,147 @@ test('OCR drops unreadable prices instead of inventing a fallback amount', () =>
   assert.equal(receipt.items[0].price, 18.5);
 });
 
+test('Hebrew OCR quality accepts readable receipt rows above the 96% release target', () => {
+  const receipt = {
+    documentLanguage: 'hebrew',
+    storeName: 'מסעדת השולחן',
+    currency: 'NIS',
+    items: [
+      { name: 'סלט יווני', price: 42 },
+      { name: 'פיצה מרגריטה', price: 64 },
+      { name: 'קולה זירו', price: 14 },
+    ],
+  };
+  const quality = assessOcrReadability(receipt, { expectedLanguage: 'hebrew', confidence: 92 });
+  const benchmark = evaluateReceiptAccuracy(receipt, receipt);
+  assert.equal(quality.readable, true);
+  assert.ok(quality.score >= HEBREW_OCR_ACCEPTANCE_TARGET);
+  assert.equal(benchmark.passed, true);
+  assert.equal(benchmark.accuracy, 1);
+});
+
+test('Hebrew OCR quality rejects mojibake instead of displaying gibberish as items', () => {
+  const quality = assessOcrReadability({
+    documentLanguage: 'hebrew',
+    currency: 'NIS',
+    items: [
+      { name: '×¤×™×¦×” ×ž×¨×’×¨×™×˜×”', price: 64 },
+      { name: '×§×•×œ×” ×–×™×¨×•', price: 14 },
+    ],
+  }, { expectedLanguage: 'hebrew', confidence: 91 });
+  assert.equal(quality.readable, false);
+  assert.ok(quality.reasons.includes('invalid-unicode-output'));
+  assert.ok(quality.reasons.includes('hebrew-script-mismatch'));
+});
+
+test('Hebrew OCR normalization removes dangerous bidi controls without reversing text', () => {
+  assert.equal(normalizeOcrName(`\u202eפיצה מרגריטה\u202c`), 'פיצה מרגריטה');
+  assert.equal(normalizeOcrName(`קולה\u200f זירו`), 'קולה זירו');
+});
+
+test('Hebrew OCR reconstructs an RTL item and its price from physical word coordinates', () => {
+  const blocks = [{ paragraphs: [{ lines: [{ words: [
+    { text: '45.00', confidence: 96, bbox: { x0: 1010, y0: 207, x1: 1126, y1: 240 } },
+  ] }, { words: [
+    { text: 'סלט', confidence: 91, bbox: { x0: 856, y0: 208, x1: 928, y1: 240 } },
+    { text: 'יווני', confidence: 86, bbox: { x0: 785, y0: 216, x1: 837, y1: 239 } },
+  ] }] }] }];
+  assert.equal(reconstructReceiptRows(blocks), '45.00 סלט יווני');
+});
+
+test('OCR row reconstruction preserves LTR order on English receipts', () => {
+  const blocks = [{ paragraphs: [{ lines: [{ words: [
+    { text: 'Greek', confidence: 95, bbox: { x0: 30, y0: 100, x1: 100, y1: 130 } },
+    { text: 'salad', confidence: 95, bbox: { x0: 110, y0: 100, x1: 170, y1: 130 } },
+  ] }, { words: [
+    { text: '45.00', confidence: 96, bbox: { x0: 400, y0: 101, x1: 470, y1: 130 } },
+  ] }] }] }];
+  assert.equal(reconstructReceiptRows(blocks), 'Greek salad 45.00');
+});
+
+test('Hebrew OCR replaces a damaged price only from the matching numeric pass coordinates', () => {
+  const primary = [{ paragraphs: [{ lines: [{ words: [
+    { text: '0', confidence: 70, bbox: { x0: 1010, y0: 300, x1: 1126, y1: 340 } },
+    { text: 'פיצה', confidence: 90, bbox: { x0: 880, y0: 305, x1: 970, y1: 340 } },
+    { text: 'מרגריטה', confidence: 91, bbox: { x0: 710, y0: 305, x1: 865, y1: 340 } },
+  ] }] }] }];
+  const numeric = [{ paragraphs: [{ lines: [{ words: [
+    { text: '62.00', confidence: 96, bbox: { x0: 1010, y0: 307, x1: 1126, y1: 340 } },
+    { text: '14.00', confidence: 96, bbox: { x0: 1010, y0: 407, x1: 1126, y1: 440 } },
+  ] }] }] }];
+  assert.equal(reconstructReceiptRows(primary, numeric), '62.00 פיצה מרגריטה');
+});
+
+test('Hebrew OCR benchmark fails when even one row name or price is wrong', () => {
+  const expected = {
+    items: [
+      { name: 'סלט יווני', price: 42 },
+      { name: 'פיצה מרגריטה', price: 64 },
+      { name: 'קולה זירו', price: 14 },
+    ],
+  };
+  const actual = {
+    items: [
+      { name: 'סלט יווני', price: 42 },
+      { name: 'פיצה מרגריטה', price: 46 },
+      { name: 'קולה זירו', price: 14 },
+    ],
+  };
+  const result = evaluateReceiptAccuracy(expected, actual);
+  assert.equal(result.passed, false);
+  assert.ok(result.accuracy < HEBREW_OCR_ACCEPTANCE_TARGET);
+});
+
+test('Hebrew OCR name verification rejects a single-letter spelling disagreement', () => {
+  assert.equal(haveSamePurchasedRows(
+    { items: [{ name: 'פיצה מרגריטה', price: 62 }] },
+    { items: [{ name: 'פיצה מרגריתא', price: 62 }] },
+  ), false);
+  assert.equal(haveSamePurchasedRows(
+    { items: [{ name: 'פיצה מרגריטה', price: 62 }] },
+    { items: [{ name: 'פיצה  מרגריטה', price: 62 }] },
+  ), true);
+});
+
+test('server Hebrew OCR policy rejects any receipt without the required independent name agreement', () => {
+  const items = [{ name: 'פיצה מרגריטה', price: 62 }];
+  assert.equal(hasRequiredHebrewVerification({
+    documentLanguage: 'hebrew',
+    items,
+    ocr: { source: 'gemini-vision', nameVerificationStatus: 'exact-cross-model-agreement' },
+  }), true);
+  assert.equal(hasRequiredHebrewVerification({
+    documentLanguage: 'hebrew',
+    items,
+    ocr: { source: 'gemini-vision', nameVerificationStatus: 'not-required' },
+  }), false);
+  assert.equal(hasRequiredHebrewVerification({
+    documentLanguage: 'hebrew',
+    items,
+    ocr: { source: 'client-tesseract', nameVerificationStatus: 'dual-hebrew-pass-agreement' },
+  }), true);
+  assert.equal(hasRequiredHebrewVerification({ documentLanguage: 'hebrew', items }), false);
+});
+
+test('Gemini normalization rejects Hebrew-script mismatch before it reaches the editor', () => {
+  const rejected = normalizeReceipt({
+    storeName: 'מסעדה',
+    documentLanguage: 'hebrew',
+    currency: 'NIS',
+    items: [{ name: 'P1zz@ xqv', lineTotal: 64 }],
+  }, '{"documentLanguage":"hebrew"}');
+  assert.equal(rejected, null);
+
+  const accepted = normalizeReceipt({
+    storeName: 'מסעדה',
+    documentLanguage: 'hebrew',
+    currency: 'NIS',
+    items: [{ name: 'פיצה מרגריטה', lineTotal: 64 }],
+  }, '{"documentLanguage":"hebrew"}');
+  assert.equal(accepted.items[0].name, 'פיצה מרגריטה');
+  assert.equal(accepted.ocrQuality.readable, true);
+});
+
 test('OCR uses the full line total when a receipt row contains multiple units', () => {
   const receipt = normalizeReceipt({
     storeName: 'Cafe',
@@ -405,6 +555,62 @@ test('OCR verification uses a different pinned model from the primary read', asy
     assert.match(endpoints[1], /gemini-2\.5-flash-lite:generateContent/);
     assert.equal(receipt.ocr.verificationStatus, 'cross_model_agreement');
     assert.equal(receipt.ocr.verificationModelName, 'gemini-2.5-flash-lite');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('Hebrew Gemini OCR fails closed on a one-letter cross-model disagreement', async () => {
+  const originalFetch = global.fetch;
+  let callCount = 0;
+  global.fetch = async () => {
+    callCount += 1;
+    const name = callCount === 1 ? 'פיצה מרגריטה' : 'פיצה מרגריתא';
+    return {
+      ok: true,
+      async json() {
+        return {
+          candidates: [{ content: { parts: [{ text: JSON.stringify({
+            storeName: 'מסעדה',
+            date: '2026-08-19',
+            currency: 'NIS',
+            documentLanguage: 'hebrew',
+            receiptTotal: 62,
+            items: [{ name, lineTotal: 62 }],
+          }) }] } }],
+        };
+      },
+    };
+  };
+  try {
+    const receipt = await parseReceiptImage('/9j/', 'image/jpeg', 'test-key', { pipelineTimeoutMs: 12_000 });
+    assert.equal(receipt, null);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('Hebrew Gemini OCR records exact cross-model name agreement', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    async json() {
+      return {
+        candidates: [{ content: { parts: [{ text: JSON.stringify({
+          storeName: 'מסעדה',
+          date: '2026-08-19',
+          currency: 'NIS',
+          documentLanguage: 'hebrew',
+          receiptTotal: 62,
+          items: [{ name: 'פיצה מרגריטה', lineTotal: 62 }],
+        }) }] } }],
+      };
+    },
+  });
+  try {
+    const receipt = await parseReceiptImage('/9j/', 'image/jpeg', 'test-key', { pipelineTimeoutMs: 12_000 });
+    assert.equal(receipt.ocr.verificationStatus, 'cross_model_agreement');
+    assert.equal(receipt.ocr.nameVerificationStatus, 'exact-cross-model-agreement');
   } finally {
     global.fetch = originalFetch;
   }

@@ -33,7 +33,7 @@ import { ManualBillModal } from '../../../components/ManualBillModal';
 import { CameraViewfinder } from '../../../components/CameraViewfinder';
 import { OCRProgressOverlay } from '../../../components/OCRProgressOverlay';
 import { SwipeableCard } from '../../../components/SwipeableCard';
-import { createReceiptDraft, receiptConfirmationPayload } from '../../../../lib/receiptScanClient';
+import { createReceiptDraft, receiptConfirmationPayload, receiptScanUserMessage } from '../../../../lib/receiptScanClient';
 import { getCookie, setCookie } from '../../../../lib/cookies';
 import { formatCurrency } from '../../../../lib/i18n';
 import { isValidIsraeliPhone, triggerBitPayment } from '../../../../lib/bitDeepLink';
@@ -316,7 +316,7 @@ export default function GroupWorkspacePage() {
       setShowCreateBillModal(true);
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : 'Error uploading receipt image.');
+      alert(receiptScanUserMessage(t));
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

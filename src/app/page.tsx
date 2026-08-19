@@ -40,7 +40,7 @@ import { SwipeableCard } from '../components/SwipeableCard';
 import { ManualBillModal } from '../components/ManualBillModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { compressAvatarImage } from '../../lib/imageUtils';
-import { createReceiptDraft, receiptConfirmationPayload } from '../../lib/receiptScanClient';
+import { createReceiptDraft, receiptConfirmationPayload, receiptScanUserMessage } from '../../lib/receiptScanClient';
 import { getCookie, setCookie } from '../../lib/cookies';
 import { triggerHaptic } from '../../lib/haptics';
 import { clearRoomCredentials, roomHeaders, saveRoomCredentials } from '../../lib/roomTokens';
@@ -385,7 +385,7 @@ export default function HomePage() {
       setShowManualModal(true);
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : t('errorUploading', undefined, 'Error uploading receipt image.'));
+      alert(receiptScanUserMessage(t));
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
