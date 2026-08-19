@@ -213,7 +213,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                 onClick={copyToClipboard}
                 className="py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-900 dark:text-white font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all"
               >
-                {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                {copied ? <Check className="w-4 h-4 text-slate-900 dark:text-white" /> : <Copy className="w-4 h-4" />}
                 <span>{copied ? t('copiedMsg', undefined, 'Copied!') : t('copyLinkBtn', undefined, 'Copy Link')}</span>
               </button>
 
@@ -246,7 +246,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             </div>
 
             {friendAddedMsg && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-extrabold text-center">
+              <p className="text-xs text-slate-900 dark:text-white font-extrabold text-center">
                 Friend added to room! ✓
               </p>
             )}

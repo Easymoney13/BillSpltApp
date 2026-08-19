@@ -7,6 +7,8 @@ import { getCookie, setCookie } from '../../lib/cookies';
 
 const i18nDictionary: Record<string, Record<string, string>> = defaultTranslations || namedTranslations || {};
 
+export const DEFAULT_REAL_AVATAR = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80';
+
 type Language = 'en' | 'he';
 type Currency = 'USD' | 'NIS';
 type Theme = 'dark' | 'light';
@@ -423,7 +425,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 event.preventDefault();
                 const displayName = guestName.trim();
                 if (!displayName) return;
-                setProfile({ displayName, avatarColor: '#10B981' });
+                setProfile({ displayName, avatarColor: '#0F172A', avatarUrl: DEFAULT_REAL_AVATAR });
               }}
             >
               <input
@@ -432,12 +434,12 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 maxLength={30}
                 placeholder={language === 'he' ? 'השם שיוצג לחברים' : 'Your display name'}
                 aria-label={language === 'he' ? 'שם תצוגה' : 'Display name'}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-slate-900 dark:focus:border-white dark:border-slate-700 dark:bg-slate-900"
                 required
               />
               <button
                 type="submit"
-                className="w-full rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-500 py-3.5 text-sm font-extrabold text-white shadow-md transition-all active:scale-95"
+                className="w-full rounded-xl bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-200 py-3.5 text-sm font-extrabold text-white dark:text-slate-900 shadow-md transition-all active:scale-95"
               >
                 {language === 'he' ? 'המשך כאורח' : 'Continue as guest'}
               </button>

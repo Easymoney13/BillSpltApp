@@ -32,7 +32,7 @@ import {
   Box,
   Pencil
 } from 'lucide-react';
-import { useLanguage } from '../components/LanguageContext';
+import { useLanguage, DEFAULT_REAL_AVATAR } from '../components/LanguageContext';
 import { CameraViewfinder } from '../components/CameraViewfinder';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { OCRProgressOverlay } from '../components/OCRProgressOverlay';
@@ -47,13 +47,13 @@ import { clearRoomCredentials, roomHeaders, saveRoomCredentials } from '../../li
 import { fetchPaginatedAccountData } from '../../lib/accountClient';
 
 const PASTEL_COLORS = [
-  { bg: 'bg-red-100 dark:bg-red-950/60', text: 'text-red-700 dark:text-red-300' },
+  { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-800 dark:text-slate-200' },
   { bg: 'bg-amber-100 dark:bg-amber-950/60', text: 'text-amber-700 dark:text-amber-300' },
-  { bg: 'bg-emerald-100 dark:bg-emerald-950/60', text: 'text-emerald-700 dark:text-emerald-300' },
+  { bg: 'bg-indigo-100 dark:bg-indigo-950/60', text: 'text-indigo-700 dark:text-indigo-300' },
   { bg: 'bg-sky-100 dark:bg-sky-950/60', text: 'text-sky-700 dark:text-sky-300' },
   { bg: 'bg-violet-100 dark:bg-violet-950/60', text: 'text-violet-700 dark:text-violet-300' },
   { bg: 'bg-pink-100 dark:bg-pink-950/60', text: 'text-pink-700 dark:text-pink-300' },
-  { bg: 'bg-teal-100 dark:bg-teal-950/60', text: 'text-teal-700 dark:text-teal-300' },
+  { bg: 'bg-zinc-100 dark:bg-zinc-800', text: 'text-zinc-700 dark:text-zinc-300' },
 ];
 
 export default function HomePage() {
@@ -261,7 +261,7 @@ export default function HomePage() {
       Food: { amount: 0, count: 0, icon: Utensils, color: 'bg-orange-500', stroke: '#F97316', label: t('catFood', undefined, 'Food') },
       Travel: { amount: 0, count: 0, icon: Globe, color: 'bg-indigo-500', stroke: '#6366F1', label: t('catTravel', undefined, 'Travel') },
       Shopping: { amount: 0, count: 0, icon: ShoppingCart, color: 'bg-purple-500', stroke: '#8B5CF6', label: t('catShopping', undefined, 'Shopping') },
-      Groceries: { amount: 0, count: 0, icon: Box, color: 'bg-emerald-500', stroke: '#10B981', label: t('catGroceries', undefined, 'Groceries') },
+      Groceries: { amount: 0, count: 0, icon: Box, color: 'bg-slate-700 dark:bg-slate-300', stroke: '#64748B', label: t('catGroceries', undefined, 'Groceries') },
       Other: { amount: 0, count: 0, icon: Sparkles, color: 'bg-amber-500', stroke: '#F59E0B', label: t('catOther', undefined, 'Other') },
     };
 
@@ -559,39 +559,6 @@ export default function HomePage() {
         className="hidden"
       />
 
-      {/* Compact Top Header */}
-      <header className="flex items-center justify-between py-2 mb-3">
-        <button
-          onClick={() => {
-            setActiveTab('sessions');
-            triggerHaptic('light');
-          }}
-          className="flex items-center gap-2.5 text-left rtl:text-right group focus:outline-none hover:opacity-80 active:scale-[0.98] transition-all duration-150"
-          title="Go to Sessions"
-        >
-          <div className="w-11 h-11 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300/60 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-xs">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-            </svg>
-          </div>
-
-          <div>
-            <span className="text-xs font-semibold text-slate-400 dark:text-slate-400 block leading-none">{t('welcomeBack', undefined, 'Welcome back')}</span>
-            <h1 className="font-black text-lg text-slate-900 dark:text-white leading-tight mt-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-              {profile.displayName || 'User'}
-            </h1>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="w-9 h-9 rounded-full bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          title="Toggle Light/Dark Theme"
-        >
-          {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
-        </button>
-      </header>
-
       {/* Camera Viewfinder Modal */}
       {showCamera && (
         <CameraViewfinder
@@ -616,16 +583,52 @@ export default function HomePage() {
         {/* TAB 2: SESSIONS (Middle tab) */}
         {activeTab === 'sessions' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Top Header - Matching Picture 1 (Sessions page only, positioned comfortably down) */}
+            <header className="flex items-center justify-between pt-8 sm:pt-10 pb-3 mb-2">
+              <div className="text-left rtl:text-right">
+                <h1 className="font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight leading-tight">
+                  {t('helloUser', { name: profile.displayName || 'James' }, `Hello ${profile.displayName || 'James'}`)}
+                </h1>
+                <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                  {t('splitBillSubtitle', undefined, 'Split your bill with EasySplit')}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  title="Toggle Light/Dark Theme"
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+                </button>
+
+                {/* Real Avatar Profile Image Button */}
+                <button
+                  onClick={() => {
+                    setActiveTab('settings');
+                    triggerHaptic('light');
+                  }}
+                  className="relative w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-slate-300 to-slate-100 dark:from-slate-700 dark:to-slate-900 border-2 border-white dark:border-slate-700 overflow-hidden shadow-sm hover:scale-105 active:scale-95 transition-all focus:outline-none shrink-0"
+                  title={profile.displayName || 'James'}
+                >
+                  <img
+                    src={profile.avatarUrl || DEFAULT_REAL_AVATAR}
+                    alt={profile.displayName || 'User Avatar'}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                </button>
+              </div>
+            </header>
+
             {/* Compact Swipe-To-Delete Active Session Card */}
             {activeSession && (
               <SwipeableCard onDelete={handleClearActiveSession}>
                 <div className="photo-card p-3.5 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-[#222C3D] shadow-sm space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-emerald-500 shrink-0">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                      </svg>
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      <div className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white animate-pulse" />
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">
                         {t('activeSplitTitle', undefined, 'Active Split')}
                       </span>
                     </div>
@@ -660,156 +663,191 @@ export default function HomePage() {
               </SwipeableCard>
             )}
 
-            {/* Consolidated Main Actions */}
-            <div className="space-y-4">
-              <input
-                type="file"
-                ref={cameraInputRef}
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
+            {/* Hidden Photo / Camera Inputs */}
+            <input
+              type="file"
+              ref={cameraInputRef}
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
 
-              {/* Start Split Hero Button */}
-              <button
+            {/* 3 Main Action Cards Layout Matching Picture 1 */}
+            <div className="grid grid-cols-2 gap-3.5 pt-1">
+              {/* Left Column: Tall Purple Card (start split) */}
+              <div
                 onClick={() => {
                   setShowStartSplitModal(true);
                   triggerHaptic('medium');
                 }}
-                className="w-full py-4 px-6 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-black text-sm rounded-2xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                className="relative rounded-[28px] bg-gradient-to-br from-[#685796] via-[#5D4E88] to-[#504177] dark:from-[#62528F] dark:via-[#574880] dark:to-[#493B70] p-5 flex flex-col justify-between overflow-hidden shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer group min-h-[256px] select-none"
               >
-                <Sparkles className="w-5 h-5 text-emerald-400 animate-pulse" />
-                <span>{t('startSplitBtn', undefined, 'Start Split')}</span>
-              </button>
+                {/* Decorative Subtle Receipt Bill Outline Pattern */}
+                <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/5 pointer-events-none group-hover:scale-110 transition-transform duration-700" />
+                <div className="absolute top-1/3 right-3 -translate-y-1/2 w-24 h-32 opacity-10 pointer-events-none group-hover:rotate-6 group-hover:scale-105 transition-transform duration-700 ease-out">
+                  <svg viewBox="0 0 100 120" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full text-white">
+                    <rect x="10" y="10" width="80" height="100" rx="8" />
+                    <line x1="26" y1="36" x2="74" y2="36" />
+                    <line x1="26" y1="56" x2="58" y2="56" />
+                    <line x1="26" y1="76" x2="74" y2="76" />
+                    <line x1="26" y1="92" x2="48" y2="92" />
+                  </svg>
+                </div>
 
-              {/* Join Session & Create Group Sub-actions */}
-              <div className="grid grid-cols-2 gap-3">
-                <button
+                {/* Interactive Top-Left Bill Icon Badge */}
+                <div className="relative z-10 w-12 h-12 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner group-hover:bg-white/30 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                  <Receipt className="w-6 h-6 text-white" />
+                </div>
+
+                {/* Card Typography Content */}
+                <div className="relative z-10 mt-auto pt-6">
+                  <h2 className="text-2xl font-black text-white leading-tight tracking-tight">
+                    {t('startSplitCard', undefined, 'start\nsplit')}
+                  </h2>
+                  <p className="text-xs font-semibold text-white/75 mt-1.5 leading-tight">
+                    {t('letTryItNow', undefined, "Let's try it now")}
+                  </p>
+                </div>
+              </div>
+
+              {/* Right Column: 2 Stacked Cards */}
+              <div className="flex flex-col gap-3.5">
+                {/* Top Card: join session via code */}
+                <div
                   onClick={() => {
                     setShowJoinSessionModal(true);
                     triggerHaptic('light');
                   }}
-                  className="flex items-center justify-center gap-2 p-3.5 bg-white dark:bg-[#121824] border border-slate-205 dark:border-[#222C3D] text-slate-800 dark:text-white font-extrabold text-xs rounded-xl hover:bg-slate-50 dark:hover:bg-[#1C2638] active:scale-[0.97] transition-all shadow-xs"
+                  className="relative rounded-[24px] bg-gradient-to-br from-[#96711C] via-[#8C6816] to-[#7B590E] dark:from-[#8D6917] dark:via-[#815E10] dark:to-[#6E4F0A] p-4 flex flex-col justify-between overflow-hidden shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer group flex-1 min-h-[120px] select-none"
                 >
-                  <QrCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>{t('joinSessionBtnAction', undefined, 'Join Session')}</span>
-                </button>
+                  <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner group-hover:bg-white/30 group-hover:scale-110 transition-all duration-300">
+                    <QrCode className="w-5 h-5 text-white" />
+                  </div>
 
-                <button
+                  <div className="mt-auto pt-2">
+                    <h3 className="text-sm font-extrabold text-white leading-snug">
+                      {t('joinSessionViaCode', undefined, 'join session\nvia code')}
+                    </h3>
+                  </div>
+                </div>
+
+                {/* Bottom Card: create a group */}
+                <div
                   onClick={() => {
                     setShowCreateGroupModal(true);
                     triggerHaptic('light');
                   }}
-                  className="flex items-center justify-center gap-2 p-3.5 bg-white dark:bg-[#121824] border border-slate-205 dark:border-[#222C3D] text-slate-800 dark:text-white font-extrabold text-xs rounded-xl hover:bg-slate-50 dark:hover:bg-[#1C2638] active:scale-[0.97] transition-all shadow-xs"
+                  className="relative rounded-[24px] bg-gradient-to-br from-[#2D3644] via-[#242C38] to-[#1C232E] dark:from-[#252E3E] dark:via-[#1F2735] dark:to-[#171D28] p-4 flex flex-col justify-between overflow-hidden shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer group flex-1 min-h-[120px] select-none"
                 >
-                  <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>{t('createGroupBtn', undefined, 'Create Group')}</span>
-                </button>
+                  <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner group-hover:bg-white/30 group-hover:scale-110 transition-all duration-300">
+                    <Users className="w-5 h-5 text-white" />
+                  </div>
+
+                  <div className="mt-auto pt-2">
+                    <h3 className="text-sm font-extrabold text-white leading-snug">
+                      {t('createAGroupCard', undefined, 'create a\ngroup')}
+                    </h3>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* YOUR ACTIVE GROUPS LIST (Enlarged Card Tiles / Skeletons when empty) */}
-            {userGroups.length > 0 ? (
-              <div className="photo-card p-4 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.35)] space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                    {t('yourActiveGroups', { n: userGroups.length }, `Your Active Groups (${userGroups.length})`)}
-                  </span>
-                  <Users className="w-4 h-4 text-slate-400" />
-                </div>
+            {/* YOUR ACTIVE GROUPS LIST (Matching Picture 1 with Rich Colorful Badges) */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  {t('yourActiveGroupsHeader', undefined, 'Your active groups')}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateGroupModal(true);
+                    triggerHaptic('light');
+                  }}
+                  className="text-xs font-extrabold text-indigo-500 hover:text-indigo-400 dark:text-indigo-400 transition-colors"
+                >
+                  {t('seeAll', undefined, 'See All')}
+                </button>
+              </div>
 
-                <div className="flex items-center gap-3.5 overflow-x-auto pb-2.5 scrollbar-none pt-1">
-                  {userGroups.map((g: any) => {
-                    let pressTimer: any = null;
+              <div className="space-y-2.5">
+                {(userGroups.length > 0
+                  ? userGroups
+                  : [
+                      { id: 'starter-1', name: "Friends' Dinner", membersCount: 4, icon: Utensils },
+                      { id: 'starter-2', name: 'Weekend Trip', membersCount: 6, icon: Plane },
+                    ]
+                ).map((g: any, idx: number) => {
+                  const GroupIcon = g.icon || (idx % 2 === 0 ? Utensils : Users);
+                  const isStarter = typeof g.id === 'string' && g.id.startsWith('starter-');
 
-                    const startPress = () => {
-                      pressTimer = setTimeout(() => {
-                        setSelectedGroupForModal(g);
-                        setGroupModalTab('options');
-                      }, 450);
-                    };
+                  // Distinctive Colorful Badge Palette
+                  const GROUP_COLOR_PALETTES = [
+                    { bg: 'bg-orange-500/15 dark:bg-orange-500/25', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-500/30' },
+                    { bg: 'bg-indigo-500/15 dark:bg-indigo-500/25', text: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-500/30' },
+                    { bg: 'bg-pink-500/15 dark:bg-pink-500/25', text: 'text-pink-600 dark:text-pink-400', border: 'border-pink-500/30' },
+                    { bg: 'bg-sky-500/15 dark:bg-sky-500/25', text: 'text-sky-600 dark:text-sky-400', border: 'border-sky-500/30' },
+                    { bg: 'bg-purple-500/15 dark:bg-purple-500/25', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-500/30' },
+                    { bg: 'bg-amber-500/15 dark:bg-amber-500/25', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/30' },
+                    { bg: 'bg-teal-500/15 dark:bg-teal-500/25', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-500/30' },
+                    { bg: 'bg-rose-500/15 dark:bg-rose-500/25', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/30' },
+                  ];
+                  const colorPalette = GROUP_COLOR_PALETTES[idx % GROUP_COLOR_PALETTES.length];
 
-                    const cancelPress = () => {
-                      if (pressTimer) clearTimeout(pressTimer);
-                    };
+                  return (
+                    <div
+                      key={g.id}
+                      onClick={() => {
+                        if (isStarter) {
+                          setShowCreateGroupModal(true);
+                        } else {
+                          router.push(`/group/${g.id}`);
+                        }
+                      }}
+                      className="p-3.5 rounded-2xl bg-white dark:bg-[#1A2230] border border-slate-200/80 dark:border-white/5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-[#222C3D] transition-all cursor-pointer shadow-xs active:scale-[0.99] group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-11 h-11 rounded-full ${colorPalette.bg} flex items-center justify-center shrink-0 border ${colorPalette.border} group-hover:scale-110 group-active:scale-95 transition-all shadow-xs`}>
+                          <GroupIcon className={`w-5 h-5 ${colorPalette.text}`} />
+                        </div>
 
-                    const codeNum = g.code ? parseInt(g.code.replace(/\D/g, '')) || 0 : 0;
-                    const colors = PASTEL_COLORS[codeNum % PASTEL_COLORS.length] || PASTEL_COLORS[0];
-
-                    return (
-                      <div key={g.id} className="relative group/item shrink-0">
-                        <button
-                          onClick={() => router.push(`/group/${g.id}`)}
-                          onMouseDown={startPress}
-                          onMouseUp={cancelPress}
-                          onMouseLeave={cancelPress}
-                          onTouchStart={startPress}
-                          onTouchEnd={cancelPress}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            setSelectedGroupForModal(g);
-                            setGroupModalTab('options');
-                          }}
-                          className="w-32 py-4 px-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 hover:bg-slate-100 dark:hover:bg-[#1A2333] transition-all flex flex-col items-center justify-center text-center select-none active:scale-[0.96] shadow-xs"
-                        >
-                          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-xs shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                            </svg>
-                          </div>
-                          
-                          <div className="w-full flex flex-col items-center mt-2.5">
-                            <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-tight line-clamp-2 h-8 flex items-center justify-center w-full px-1">
-                              {g.name}
-                            </h4>
-                            <span className="text-[9px] font-mono font-bold text-slate-450 dark:text-slate-500 mt-0.5 block">
+                        <div className="min-w-0">
+                          <h4 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
+                            {g.name}{' '}
+                            <span className="font-semibold text-slate-400 text-xs">
+                              ({g.membersCount || 4} members)
+                            </span>
+                          </h4>
+                          {g.code && !isStarter && (
+                            <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
                               #{g.code}
                             </span>
-                            <span className="text-[8px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mt-2 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 flex items-center gap-1">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                              </svg>
-                              <span>{g.membersCount ? `${g.membersCount} members` : t('groupNoMembers', undefined, 'Active Group')}</span>
-                            </span>
-                          </div>
-                        </button>
+                          )}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="photo-card p-4 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.35)] space-y-3 animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                    {t('yourActiveGroups', { n: 0 }, 'Your Active Groups (0)')}
-                  </span>
-                  <Users className="w-4 h-4 text-slate-400" />
-                </div>
 
-                <div className="flex items-center gap-3.5 overflow-x-auto pb-2.5 scrollbar-none pt-1">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="w-32 py-4 px-3 rounded-2xl bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/40 dark:border-slate-800/40 transition-all flex flex-col items-center justify-center text-center select-none opacity-45 animate-pulse shrink-0"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0" />
-                      
-                      <div className="w-full flex flex-col items-center mt-2.5 space-y-2">
-                        <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-16" />
-                        <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-10" />
-                        <div className="h-3 bg-slate-200/70 dark:bg-slate-800/70 rounded-full w-20 mt-1" />
-                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isStarter) {
+                            setShowCreateGroupModal(true);
+                          } else {
+                            setSelectedGroupForModal(g);
+                            setGroupModalTab('options');
+                          }
+                        }}
+                        className="p-2 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                        title="Group options"
+                      >
+                        <span className="font-black text-sm tracking-widest leading-none">•••</span>
+                      </button>
                     </div>
-                  ))}
-                </div>
-
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold text-center pt-1 leading-normal">
-                  {t('noGroupsYetHint', undefined, '💡 Create a group above to start a shared expense tracker with friends!')}
-                </p>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -828,19 +866,38 @@ export default function HomePage() {
 
           return (
             <div className="space-y-5 animate-fadeIn pb-4">
-              {/* Financial Dashboard Card (Top) - Compact & Elegant */}
-              <div className="photo-card p-4 sm:p-4.5 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/5 shadow-md shadow-slate-950/10 rounded-2xl space-y-3">
-                {/* Header: Total expenses & Amount */}
-                <div className="text-center sm:text-left">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">
+              {/* Top Header for History Tab (Positioned lower down) */}
+              <header className="flex items-center justify-between pt-8 sm:pt-10 pb-3 mb-2">
+                <div>
+                  <h1 className="font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight leading-tight">
+                    {t('tabHistory', undefined, 'History')}
+                  </h1>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                    className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    title="Toggle Light/Dark Theme"
+                  >
+                    {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+                  </button>
+                </div>
+              </header>
+
+              {/* Financial Dashboard Card (Top) - Compact & Elegant with Centered Total Above Pie */}
+              <div className="photo-card p-5 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-white/5 shadow-md shadow-slate-950/10 rounded-2xl space-y-3 flex flex-col items-center justify-center">
+                {/* Header: Total expenses & Amount Centered Right Above Pie Graph */}
+                <div className="text-center flex flex-col items-center justify-center pt-1">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block tracking-wide">
                     {t('totalExpenses', undefined, 'Total expenses')}
                   </span>
-                  <div className="flex items-baseline justify-center sm:justify-start gap-2 mt-0.5">
-                    <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                  <div className="flex items-baseline justify-center gap-2 mt-1">
+                    <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                       {totalSpentDual.primary}
                     </span>
                     {totalSpentDual.secondary && (
-                      <span className="text-[11px] font-bold text-slate-400">
+                      <span className="text-xs font-bold text-slate-400">
                         {totalSpentDual.secondary}
                       </span>
                     )}
@@ -972,7 +1029,7 @@ export default function HomePage() {
                         iconBg = 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200/60 dark:border-indigo-800/40';
                       } else if (titleLower.includes('super') || titleLower.includes('market') || titleLower.includes('grocer')) {
                         ItemIcon = Box;
-                        iconBg = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200/60 dark:border-emerald-800/40';
+                        iconBg = 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200/60 dark:border-slate-700/60';
                       }
 
                       return (
@@ -1000,9 +1057,7 @@ export default function HomePage() {
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                                     </svg>
                                   ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-emerald-500 shrink-0" aria-label="Settled">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                                    </svg>
+                                    <Check className="w-3.5 h-3.5 text-slate-900 dark:text-white shrink-0" aria-label="Settled" />
                                   )}
                                   <h4 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
                                     {item.storeName}
@@ -1052,29 +1107,27 @@ export default function HomePage() {
 
         {/* TAB 3: SETTINGS / PROFILE */}
         {activeTab === 'settings' && (
-          <div className="space-y-5 animate-fadeIn pb-6">
-            {/* Header: "Profile" */}
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white text-center">
-              {t('profileTitle', undefined, 'Profile')}
-            </h2>
+          <div className="space-y-5 animate-fadeIn pb-6 pt-8 sm:pt-10">
+            {/* Top Right Controls: Theme Toggle */}
+            <div className="flex items-center justify-end px-1 pb-1">
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                title="Toggle Light/Dark Theme"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+              </button>
+            </div>
 
-            {/* Profile Avatar Centered with Edit Badge - Matching Picture 4 */}
+            {/* Profile Avatar Centered with Edit Badge */}
             <div className="flex flex-col items-center justify-center space-y-2 py-2">
               <div className="relative group cursor-pointer" onClick={() => avatarFileInputRef.current?.click()}>
                 <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-white dark:bg-[#1A2333] border-4 border-slate-100 dark:border-[#222C3D] flex items-center justify-center overflow-hidden shadow-lg transition-transform duration-200 group-hover:scale-105 active:scale-95">
-                  {profile.avatarUrl ? (
-                    <img
-                      src={profile.avatarUrl}
-                      alt="Profile Avatar"
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full rounded-full flex items-center justify-center bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700 shadow-inner">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                      </svg>
-                    </div>
-                  )}
+                  <img
+                    src={profile.avatarUrl || DEFAULT_REAL_AVATAR}
+                    alt="Profile Avatar"
+                    className="w-full h-full rounded-full object-cover"
+                  />
                 </div>
 
                 {/* Floating Rounded-Square Pencil Edit Badge (Bottom Right) */}
@@ -1120,7 +1173,7 @@ export default function HomePage() {
                   </h3>
                   <button
                     type="submit"
-                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                    className="text-xs font-bold text-slate-900 dark:text-white hover:underline"
                   >
                     {t('editLabel', undefined, 'Edit')}
                   </button>
@@ -1172,26 +1225,26 @@ export default function HomePage() {
                       onClick={() => setTheme('light')}
                       className={`flex-1 py-2 rounded-full border text-[11px] font-extrabold flex items-center justify-center gap-1 transition-all ${
                         theme === 'light'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                          ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                           : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
                       <Sun className="w-3.5 h-3.5" />
                       <span>{t('lightModeBtn', undefined, 'Light')}</span>
-                      {theme === 'light' && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />}
+                      {theme === 'light' && <Check className="w-3 h-3" />}
                     </button>
                     <button
                       type="button"
                       onClick={() => setTheme('dark')}
                       className={`flex-1 py-2 rounded-full border text-[11px] font-extrabold flex items-center justify-center gap-1 transition-all ${
                         theme === 'dark'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                          ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                           : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
                       <Moon className="w-3.5 h-3.5" />
                       <span>{t('darkModeBtn', undefined, 'Dark Mode')}</span>
-                      {theme === 'dark' && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />}
+                      {theme === 'dark' && <Check className="w-3 h-3" />}
                     </button>
                   </div>
                 </div>
@@ -1209,12 +1262,12 @@ export default function HomePage() {
                         onClick={() => setCurrency(curr)}
                         className={`flex-1 py-2 rounded-full border text-[11px] font-extrabold transition-all flex items-center justify-center gap-1.5 ${
                           currency === curr
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                            ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                             : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
                       >
                         <span>{curr} ({curr === 'USD' ? '$' : '₪'})</span>
-                        {currency === curr && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />}
+                        {currency === curr && <Check className="w-3 h-3" />}
                       </button>
                     ))}
                   </div>
@@ -1230,24 +1283,24 @@ export default function HomePage() {
                       onClick={() => setLanguage('en')}
                       className={`flex-1 py-2 rounded-full border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
                         language === 'en'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                          ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                           : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
                       <span>{t('englishLangBtn', undefined, 'English')} 🇺🇸</span>
-                      {language === 'en' && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />}
+                      {language === 'en' && <Check className="w-3 h-3" />}
                     </button>
                     <button
                       type="button"
                       onClick={() => setLanguage('he')}
                       className={`flex-1 py-2 rounded-full border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
                         language === 'he'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                          ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                           : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
                       <span>{t('hebrewLangBtn', undefined, 'עברית (Hebrew)')} 🇮🇱</span>
-                      {language === 'he' && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />}
+                      {language === 'he' && <Check className="w-3 h-3" />}
                     </button>
                   </div>
                 </div>
@@ -1283,7 +1336,7 @@ export default function HomePage() {
           
           {/* Animated Sliding Pill Indicator */}
           <div
-            className="absolute top-1 bottom-1 rounded-full bg-slate-900 dark:bg-emerald-600 shadow-md transition-all duration-350 ease-out nav-slider"
+            className="absolute top-1 bottom-1 rounded-full bg-slate-900 dark:bg-white shadow-md transition-all duration-350 ease-out nav-slider"
             style={{
               width: 'calc((100% - 16px) / 3)',
               transform: `translateX(calc(${activeTabIndex * (isRtl ? -1 : 1)} * (100% + 8px)))`
@@ -1298,7 +1351,7 @@ export default function HomePage() {
             }}
             className={`relative z-10 flex flex-col items-center justify-center py-2 rounded-full transition-colors duration-200 font-bold active:scale-95 ${
               activeTab === 'history'
-                ? 'text-white font-extrabold'
+                ? 'text-white dark:text-slate-900 font-extrabold'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
@@ -1314,7 +1367,7 @@ export default function HomePage() {
             }}
             className={`relative z-10 flex flex-col items-center justify-center py-2 rounded-full transition-colors duration-200 font-bold active:scale-95 ${
               activeTab === 'sessions'
-                ? 'text-white font-extrabold'
+                ? 'text-white dark:text-slate-900 font-extrabold'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
@@ -1332,7 +1385,7 @@ export default function HomePage() {
             }}
             className={`relative z-10 flex flex-col items-center justify-center py-2 rounded-full transition-colors duration-200 font-bold active:scale-95 ${
               activeTab === 'settings'
-                ? 'text-white font-extrabold'
+                ? 'text-white dark:text-slate-900 font-extrabold'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
@@ -1392,7 +1445,7 @@ export default function HomePage() {
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
                   </svg>
@@ -1411,7 +1464,7 @@ export default function HomePage() {
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white">
                   <Upload className="w-5 h-5" />
                 </div>
                 <div>
@@ -1431,7 +1484,7 @@ export default function HomePage() {
                 }}
                 className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
                   </svg>
@@ -1456,7 +1509,7 @@ export default function HomePage() {
             {/* Header */}
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                <QrCode className="w-5 h-5 text-slate-900 dark:text-white" />
                 <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">{t('joinViaCode', undefined, 'Join Split or Group')}</h3>
               </div>
               <button
@@ -1647,7 +1700,7 @@ export default function HomePage() {
                   className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-between transition-colors"
                 >
                   <span className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-emerald-500" />
+                    <Users className="w-4 h-4 text-slate-700 dark:text-slate-300" />
                     <span>{t('seeGroupDetails', undefined, 'See Group Details')}</span>
                   </span>
                   <span className="text-[10px] text-slate-400">📋</span>

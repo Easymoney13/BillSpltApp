@@ -65,6 +65,27 @@ body {
   box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4);
 }
 
+/* Enhanced Interactive Button Feedback */
+button,
+[role="button"],
+.interactive-btn {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button:active:not(:disabled),
+[role="button"]:active:not(:disabled),
+.interactive-btn:active {
+  transform: scale(0.94) !important;
+  filter: brightness(0.92);
+}
+
+button:hover:not(:disabled):not(:active),
+[role="button"]:hover:not(:disabled):not(:active) {
+  transform: translateY(-1px);
+}
+
 .photo-btn-dark {
   background-color: #0F172A;
   color: #FFFFFF;
@@ -78,28 +99,49 @@ body {
   transform: translateY(-1px);
 }
 
+.photo-btn-dark:active {
+  transform: scale(0.94) !important;
+}
+
 .dark .photo-btn-dark {
-  background-color: #10B981;
-  color: #FFFFFF;
+  background-color: #FFFFFF;
+  color: #000000;
   font-weight: 800;
 }
 
 .dark .photo-btn-dark:hover {
-  background-color: #059669;
+  background-color: #E2E8F0;
+}
+
+.dark .photo-btn-dark:active {
+  transform: scale(0.94) !important;
 }
 
 .photo-btn-lime, .photo-btn-indigo {
-  background-color: #10B981;
+  background-color: #0F172A;
   color: #FFFFFF;
   border-radius: 9999px;
   font-weight: 800;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.dark .photo-btn-lime, .dark .photo-btn-indigo {
+  background-color: #FFFFFF;
+  color: #000000;
 }
 
 .photo-btn-lime:hover, .photo-btn-indigo:hover {
-  background-color: #059669;
+  background-color: #1E293B;
   transform: translateY(-1px);
+}
+
+.dark .photo-btn-lime:hover, .dark .photo-btn-indigo:hover {
+  background-color: #F1F5F9;
+}
+
+.photo-btn-lime:active, .photo-btn-indigo:active {
+  transform: scale(0.94) !important;
 }
 
 .photo-input {
@@ -111,8 +153,8 @@ body {
 }
 
 .photo-input:focus {
-  border-color: #10B981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  border-color: #0F172A;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.12);
   outline: none;
 }
 
@@ -123,8 +165,8 @@ body {
 }
 
 .dark .photo-input:focus {
-  border-color: #10B981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  border-color: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15);
 }
 
 /* Sliding nav pill indicator transition */
@@ -242,5 +284,52 @@ body {
 
 .animate-ambientGlow {
   animation: ambientGlow 4s ease-in-out infinite;
+}
+
+@keyframes scaleUp {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bounceShort {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.animate-scaleUp {
+  animation: scaleUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-bounce-short {
+  animation: bounceShort 0.8s ease-in-out infinite;
+}
+
+.animate-pulseRing {
+  animation: pulseRing 2s ease-in-out infinite;
 }
 

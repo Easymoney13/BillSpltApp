@@ -26,7 +26,8 @@ import {
   Trash2,
   Link2,
   Share2,
-  CreditCard
+  CreditCard,
+  Loader2
 } from 'lucide-react';
 import { useLanguage } from '../../../components/LanguageContext';
 import { QRCodeModal } from '../../../components/QRCodeModal';
@@ -119,6 +120,7 @@ function SessionWorkspaceInner() {
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [showAttachGroupModal, setShowAttachGroupModal] = useState<boolean>(false);
   const [userGroups, setUserGroups] = useState<any[]>([]);
+  const [isSettling, setIsSettling] = useState<'idle' | 'loading' | 'success'>('idle');
 
   // Input states
   const [newItemName, setNewItemName] = useState('');
@@ -519,7 +521,7 @@ function SessionWorkspaceInner() {
   const getItemIcon = (category: string) => {
     const catLower = (category || '').toLowerCase();
     if (catLower.includes('drink') || catLower.includes('beverage') || catLower.includes('coke') || catLower.includes('beer')) {
-      return <GlassWater className="w-4 h-4 text-emerald-500 shrink-0" />;
+      return <GlassWater className="w-4 h-4 text-sky-500 shrink-0" />;
     } else if (catLower.includes('dessert') || catLower.includes('sweet') || catLower.includes('ice')) {
       return <Cookie className="w-4 h-4 text-amber-500 shrink-0" />;
     } else if (catLower.includes('service') || catLower.includes('tax') || catLower.includes('tip')) {
@@ -661,7 +663,7 @@ function SessionWorkspaceInner() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="w-10 h-10 rounded-full bg-slate-900 dark:bg-emerald-600 text-white flex items-center justify-center hover:bg-slate-800 dark:hover:bg-emerald-500 transition-colors shadow-sm font-bold active:scale-95"
+            className="w-10 h-10 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors shadow-sm font-bold active:scale-95"
             title="Share & Invite"
           >
             <Share2 className="w-5 h-5" />
@@ -692,7 +694,7 @@ function SessionWorkspaceInner() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="py-1 px-3 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1 transition-all shadow-sm active:scale-95"
+            className="py-1 px-3 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white text-xs font-extrabold flex items-center gap-1 transition-all shadow-sm active:scale-95"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>{t('inviteBtn', undefined, 'Invite')}</span>
@@ -719,12 +721,12 @@ function SessionWorkspaceInner() {
                 <span>{validName} {isMe ? t('youSuffix', undefined, '(You)') : ''}</span>
 
                 {member?.isHost && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-slate-900 dark:bg-emerald-600 text-[9px] font-extrabold text-white">
+                  <span className="px-1.5 py-0.5 rounded-full bg-slate-900 dark:bg-white text-[9px] font-extrabold text-white dark:text-slate-900">
                     {t('hostBadge', undefined, 'HOST')}
                   </span>
                 )}
                 {member?.settled && (
-                  <span className="text-emerald-500 text-xs font-bold">✓</span>
+                  <span className="text-slate-900 dark:text-white text-xs font-bold">✓</span>
                 )}
               </div>
             );
@@ -733,12 +735,12 @@ function SessionWorkspaceInner() {
 
         {/* Dedicated Clean Attach to Group Bar */}
         {session.groupId ? (
-          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold">
+          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-extrabold">
             <span className="flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-emerald-500" />
+              <Link2 className="w-4 h-4 text-slate-900 dark:text-white" />
               <span>{t('billAttachedToGroup', undefined, 'Bill Attached to Group')}</span>
             </span>
-            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 shadow-sm">
+            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm">
               {t('linkedBadge', undefined, 'LINKED ✓')}
             </span>
           </div>
@@ -747,7 +749,7 @@ function SessionWorkspaceInner() {
             onClick={() => setShowAttachGroupModal(true)}
             className="w-full py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-extrabold flex items-center justify-center gap-2 transition-all border border-dashed border-slate-300 dark:border-slate-700 active:scale-95 shadow-sm"
           >
-            <Link2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <Link2 className="w-4 h-4 text-slate-900 dark:text-white" />
             <span>{t('attachBillTitle', undefined, 'Attach Bill to Group')} 🔗</span>
           </button>
         )}
@@ -755,7 +757,7 @@ function SessionWorkspaceInner() {
         {/* Dedicated "Who paid?" Selector Bar - Clean, spacious & uncluttered */}
         <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs gap-2">
           <div className="flex items-center gap-2 shrink-0">
-            <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <CreditCard className="w-4 h-4 text-slate-900 dark:text-white shrink-0" />
             <span className="font-extrabold text-slate-900 dark:text-white text-xs">
               {t('whoPaidShort', undefined, 'Who paid?')}
             </span>
@@ -765,7 +767,7 @@ function SessionWorkspaceInner() {
             value={activePayerId}
             onChange={(e) => sendAction('SET_PAYER', { payerId: e.target.value })}
             disabled={!isCurrentUserHost || isAccountingLocked}
-            className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-white shadow-xs focus:ring-2 focus:ring-purple-500/20 cursor-pointer max-w-[220px] truncate"
+            className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-white shadow-xs focus:ring-2 focus:ring-slate-900/20 cursor-pointer max-w-[220px] truncate"
           >
             <option value="each">👥 {t('eachPaidShareOption', undefined, 'Each paid their share')}</option>
             {validMembers.map((m: any) => (
@@ -781,7 +783,7 @@ function SessionWorkspaceInner() {
       {/* Shared Receipt Items Section */}
       <div className="flex-1 space-y-4">
         {isSessionClosed && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-center text-sm font-bold text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-200">
             {t('sessionClosedNotice', undefined, 'This session is settled and is now read-only.')}
           </div>
         )}
@@ -821,9 +823,9 @@ function SessionWorkspaceInner() {
 
               <button
                 onClick={() => sendAction('SPLIT_EVERYONE', {})}
-                className="py-1.5 px-3.5 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                className="py-1.5 px-3.5 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
               >
-                <Zap className="w-3.5 h-3.5 fill-white" />
+                <Zap className="w-3.5 h-3.5 fill-current" />
                 <span>{t('splitAllBtn', undefined, 'Split All')}</span>
               </button>
             </div>
@@ -846,13 +848,13 @@ function SessionWorkspaceInner() {
                 onClick={isAccountingLocked ? undefined : () => sendAction('TOGGLE_CLAIM', { itemId: item?.id, memberId: currentMemberId, claimed: !isClaimedByMe })}
                 className={`relative p-5 transition-all flex flex-col ${isAccountingLocked ? '' : 'cursor-pointer'} ${
                   isClaimedByMe
-                    ? 'bg-emerald-50/30 dark:bg-emerald-950/10'
+                    ? 'bg-slate-100/70 dark:bg-white/5'
                     : 'hover:bg-slate-50/50 dark:hover:bg-white/[0.01]'
                 }`}
               >
                 {/* Visual left accent bar when claimed */}
                 {isClaimedByMe && (
-                  <div className="absolute top-0 bottom-0 w-1 bg-emerald-500 ltr:left-0 rtl:right-0" />
+                  <div className="absolute top-0 bottom-0 w-1 bg-slate-900 dark:bg-white ltr:left-0 rtl:right-0" />
                 )}
 
                 <div className="flex items-start justify-between mb-1">
@@ -873,7 +875,7 @@ function SessionWorkspaceInner() {
                           <button
                             type="button"
                             onClick={(e) => handleOpenEditModal(item, e)}
-                            className="p-1 rounded-full text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                            className="p-1 rounded-full text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                             title={t('editItemTitle', undefined, 'Edit Item')}
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -927,7 +929,7 @@ function SessionWorkspaceInner() {
                             key={cId}
                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
                               isMeClaimant
-                                ? 'bg-emerald-600 text-white shadow-xs'
+                                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
                                 : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200/50 dark:border-white/5'
                             }`}
                           >
@@ -936,7 +938,7 @@ function SessionWorkspaceInner() {
                             </svg>
 
                             <span>{fullName}</span>
-                            {isMeClaimant && <Check className="w-2.5 h-2.5 text-white stroke-[3]" />}
+                            {isMeClaimant && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                           </div>
                         );
                       })
@@ -963,7 +965,7 @@ function SessionWorkspaceInner() {
       {isCurrentUserHost && !isAccountingLocked && <button
         onClick={() => setShowAddItemModal(true)}
         aria-label={t('addItemBtn', undefined, 'Add Item')}
-        className="fixed bottom-24 ltr:right-6 rtl:left-6 z-30 w-14 h-14 rounded-full bg-slate-900 dark:bg-emerald-600 text-white font-extrabold shadow-float flex items-center justify-center hover:scale-105 transition-all active:scale-95"
+        className="fixed bottom-24 ltr:right-6 rtl:left-6 z-30 w-14 h-14 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold shadow-float flex items-center justify-center hover:scale-105 transition-all active:scale-95"
       >
         <Plus className="w-7 h-7" />
       </button>}
@@ -981,7 +983,7 @@ function SessionWorkspaceInner() {
                   {shareDual?.primary || '0.00'}
                 </span>
                 {shareDual?.secondary && (
-                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                     ({shareDual.secondary})
                   </span>
                 )}
@@ -998,7 +1000,7 @@ function SessionWorkspaceInner() {
             }
             setShowSettleModal(true);
           }}
-          className="py-3.5 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold shadow-lg shadow-slate-900/20 text-sm transition-all active:scale-95"
+          className="py-3.5 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 font-bold shadow-lg shadow-slate-900/20 text-sm transition-all active:scale-95"
         >
           {isCurrentMemberSettled && !isCurrentUserHost
             ? t('reopenMyShareBtn', undefined, 'Reopen My Share')
@@ -1220,7 +1222,7 @@ function SessionWorkspaceInner() {
                         }}
                         className={`py-2 rounded-full text-xs font-extrabold transition-all border active:scale-95 duration-100 ${
                           tipPercentage === pct && !customTipInput
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                            ? 'bg-black text-white border-black dark:bg-white dark:text-slate-900 shadow-sm'
                             : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
@@ -1243,7 +1245,7 @@ function SessionWorkspaceInner() {
                       onBlur={() => sendAction('SET_TIP', { tipPercentage })}
                       min="0"
                       max="100"
-                      className="w-full py-2 pl-3 pr-7 rounded-full text-xs text-center font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-750 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-full py-2 pl-3 pr-7 rounded-full text-xs text-center font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-750 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-slate-400 pointer-events-none">%</span>
                   </div>
@@ -1282,7 +1284,7 @@ function SessionWorkspaceInner() {
                         }}
                         className={`py-0.5 px-2 rounded-full text-[10px] font-extrabold transition-all border ${
                           isRounded
-                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                            ? 'bg-black text-white border-black dark:bg-white dark:text-slate-900 shadow-xs'
                             : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-750 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
                         }`}
                       >
@@ -1300,7 +1302,7 @@ function SessionWorkspaceInner() {
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <CreditCard className="w-4 h-4 text-slate-900 dark:text-white" />
                     <span className="text-xs font-bold text-slate-900 dark:text-white">
                       {t('whoPaidLabel', undefined, 'Who paid the bill?')}
                     </span>
@@ -1344,7 +1346,7 @@ function SessionWorkspaceInner() {
                             storeName: session?.storeName || 'BillSplit Room'
                           });
                         }}
-                        className="py-3 px-3 rounded-xl bg-gradient-to-r from-[#7026FF] to-[#00C2F3] text-white font-black text-xs shadow-sm hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
+                        className="py-3 px-3 rounded-xl bg-slate-900 text-white font-black text-xs shadow-sm hover:opacity-90 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
                       >
                         <span>Bit (₪{finalDueVal.toFixed(2)})</span>
                       </button>
@@ -1366,27 +1368,35 @@ function SessionWorkspaceInner() {
                             window.open(`https://payboxapp.page.link/pay?phone=${phone}&amount=${amount}`, '_blank');
                           }
                         }}
-                        className="py-3 px-3 rounded-xl bg-gradient-to-r from-[#005082] to-[#00C5B4] text-white font-black text-xs shadow-sm hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
+                        className="py-3 px-3 rounded-xl bg-slate-800 text-white font-black text-xs shadow-sm hover:opacity-90 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
                       >
                         <span>Paybox (₪{finalDueVal.toFixed(2)})</span>
                       </button>
                     </div>
                   ) : (
-                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-700 dark:text-amber-300 font-medium text-center">
+                    <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 font-medium text-center">
                       {t('payerPhoneNotSetNote', { name: activePayerName }, `${activePayerName} has not added a payment phone number yet. Please settle in person.`)}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Settle Action Buttons */}
+              {/* Settle Action Button - Matching Picture 2 Specification */}
               <div className="pt-2">
                 <button
+                  disabled={isSettling !== 'idle'}
                   onClick={async () => {
+                    setIsSettling('loading');
+                    triggerHaptic('medium');
+
                     const success = isCurrentUserHost
                       ? await sendAction('SETTLE_ALL', {})
                       : await sendAction('TOGGLE_SETTLED', { memberId: currentMemberId, settled: true });
-                    if (!success) return;
+
+                    if (!success) {
+                      setIsSettling('idle');
+                      return;
+                    }
 
                     // Only a host closure is canonical history. A member who
                     // marks their share paid stays in the live room.
@@ -1413,21 +1423,44 @@ function SessionWorkspaceInner() {
                       console.error('Error saving local history:', e);
                     }
 
+                    // Smooth success transition on button
+                    setIsSettling('success');
+                    triggerHaptic('success');
                     triggerCelebration();
-                    setShowSettleModal(false);
-                    if (isCurrentUserHost) {
-                      localStorage.removeItem('billsplit_active_session');
-                      setTimeout(() => router.push('/?tab=history'), 1200);
-                    }
+
+                    setTimeout(() => {
+                      setShowSettleModal(false);
+                      if (isCurrentUserHost) {
+                        localStorage.removeItem('billsplit_active_session');
+                        router.push('/?tab=history');
+                      }
+                      setIsSettling('idle');
+                    }, 1400);
                   }}
-                  className="w-full py-4 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-extrabold text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 text-center"
+                  className={`w-full py-4 rounded-full bg-black dark:bg-black text-white font-black text-sm border border-white/20 hover:border-white/40 shadow-2xl flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] text-center relative overflow-hidden group select-none ${
+                    isSettling === 'success' ? 'ring-4 ring-white/30 bg-neutral-900' : ''
+                  }`}
                 >
-                  <CheckCircle2 className="w-5 h-5 text-white" />
-                  <span>
-                    {isCurrentUserHost
-                      ? t('settleAndCloseSessionBtn', undefined, 'Settle Payment & Close Session')
-                      : t('markPaidBtn', undefined, 'Mark My Share as Paid')}
-                  </span>
+                  {isSettling === 'loading' ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin text-white" />
+                      <span>{isCurrentUserHost ? t('settlingSession', undefined, 'Settling Session...') : t('markingPaid', undefined, 'Marking Paid...')}</span>
+                    </>
+                  ) : isSettling === 'success' ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-white animate-scaleUp" />
+                      <span className="animate-fadeIn">{t('settledSuccessMsg', undefined, 'Settled Successfully! 🎉')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
+                      <span>
+                        {isCurrentUserHost
+                          ? t('settleAndCloseSessionBtn', undefined, 'Settle Payment & Close Session')
+                          : t('markPaidBtn', undefined, 'Mark My Share as Paid')}
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1449,15 +1482,15 @@ function SessionWorkspaceInner() {
           onClick={() => setShowCompletionReaction(false)}
         >
           <div 
-            className="w-full max-w-xs rounded-3xl p-6 bg-white dark:bg-[#121824] border border-emerald-500/30 text-center space-y-4 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-scaleUp"
+            className="w-full max-w-xs rounded-3xl p-6 bg-white dark:bg-[#121824] border border-slate-200 dark:border-white/10 text-center space-y-4 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-scaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Animated Radiant Check Circle */}
             <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping opacity-75" />
-              <div className="relative w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-[0_0_30px_rgba(16,185,129,0.5)] flex items-center justify-center">
-                <div className="w-full h-full rounded-full bg-white dark:bg-[#121824] flex items-center justify-center text-emerald-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-emerald-500 animate-bounce-short">
+              <div className="absolute inset-0 rounded-full bg-slate-400/20 dark:bg-white/10 animate-ping opacity-75" />
+              <div className="relative w-20 h-20 rounded-full bg-slate-900 dark:bg-white p-0.5 shadow-[0_0_30px_rgba(0,0,0,0.3)] dark:shadow-[0_0_30px_rgba(255,255,255,0.3)] flex items-center justify-center">
+                <div className="w-full h-full rounded-full bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-white dark:text-slate-900 animate-bounce-short">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                   </svg>
                 </div>
@@ -1479,7 +1512,7 @@ function SessionWorkspaceInner() {
                 setShowCompletionReaction(false);
                 router.push('/?tab=history');
               }}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-extrabold text-xs shadow-md hover:brightness-110 active:scale-95 transition-all"
+              className="w-full py-3 px-4 rounded-xl bg-black dark:bg-white text-white dark:text-slate-900 font-extrabold text-xs shadow-md hover:opacity-90 active:scale-95 transition-all"
             >
               <span>{t('viewHistoryBtn', undefined, 'View in History')}</span>
             </button>

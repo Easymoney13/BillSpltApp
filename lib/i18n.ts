@@ -3,6 +3,14 @@ export const translations: Record<string, Record<string, string>> = {
     appName: "BillSplit",
     tagline: "Split bills instantly in real-time with friends",
     welcomeBack: "Welcome back",
+    helloUser: "Hello {name}",
+    splitBillSubtitle: "Split your bill with EasySplit",
+    startSplitCard: "start split",
+    letTryItNow: "Let's try it now",
+    joinSessionViaCode: "join session via code",
+    createAGroupCard: "create a group",
+    seeAll: "See All",
+    yourActiveGroupsHeader: "Your active groups",
     
     // Tabs
     tabSessions: "Sessions",
@@ -246,6 +254,14 @@ export const translations: Record<string, Record<string, string>> = {
     appName: "BillSplit",
     tagline: "חלוקת חשבונות מהירה בזמן אמת עם חברים",
     welcomeBack: "ברוך שובך",
+    helloUser: "היי {name}",
+    splitBillSubtitle: "פצל את החשבון שלך בקלות עם EasySplit",
+    startSplitCard: "התחל פיצול",
+    letTryItNow: "בוא ננסה עכשיו",
+    joinSessionViaCode: "הצטרף לסשן עם קוד",
+    createAGroupCard: "צור קבוצה",
+    seeAll: "הצג הכל",
+    yourActiveGroupsHeader: "הקבוצות הפעילות שלך",
     
     // Tabs
     tabSessions: "סשנים",
