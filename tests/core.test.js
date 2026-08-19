@@ -373,6 +373,20 @@ test('Hebrew OCR quality accepts readable receipt rows above the 96% release tar
   assert.equal(benchmark.accuracy, 1);
 });
 
+test('Hebrew OCR quality keeps mixed-brand receipts reviewable instead of rejecting them', () => {
+  const quality = assessOcrReadability({
+    documentLanguage: 'hebrew',
+    currency: 'NIS',
+    items: [
+      { name: 'קולה זירו', price: 14 },
+      { name: 'Coca Cola', price: 16 },
+      { name: 'Sprite', price: 15 },
+    ],
+  }, { expectedLanguage: 'hebrew', confidence: 54 });
+  assert.equal(quality.readable, true);
+  assert.ok(quality.score >= 0.58);
+});
+
 test('Hebrew OCR quality rejects mojibake instead of displaying gibberish as items', () => {
   const quality = assessOcrReadability({
     documentLanguage: 'hebrew',
@@ -456,7 +470,7 @@ test('Hebrew OCR name verification rejects a single-letter spelling disagreement
   ), true);
 });
 
-test('server Hebrew OCR policy rejects any receipt without the required independent name agreement', () => {
+test('server Hebrew OCR policy accepts readable review drafts but rejects missing evidence', () => {
   const items = [{ name: 'פיצה מרגריטה', price: 62 }];
   assert.equal(hasRequiredHebrewVerification({
     documentLanguage: 'hebrew',
@@ -466,12 +480,17 @@ test('server Hebrew OCR policy rejects any receipt without the required independ
   assert.equal(hasRequiredHebrewVerification({
     documentLanguage: 'hebrew',
     items,
-    ocr: { source: 'gemini-vision', nameVerificationStatus: 'not-required' },
-  }), false);
+    ocr: { source: 'gemini-vision', nameVerificationStatus: 'review-required' },
+  }), true);
   assert.equal(hasRequiredHebrewVerification({
     documentLanguage: 'hebrew',
     items,
     ocr: { source: 'client-tesseract', nameVerificationStatus: 'dual-hebrew-pass-agreement' },
+  }), true);
+  assert.equal(hasRequiredHebrewVerification({
+    documentLanguage: 'hebrew',
+    items,
+    ocr: { source: 'client-tesseract', nameVerificationStatus: 'single-hebrew-pass-review' },
   }), true);
   assert.equal(hasRequiredHebrewVerification({ documentLanguage: 'hebrew', items }), false);
 });
@@ -560,7 +579,7 @@ test('OCR verification uses a different pinned model from the primary read', asy
   }
 });
 
-test('Hebrew Gemini OCR fails closed on a one-letter cross-model disagreement', async () => {
+test('Hebrew Gemini OCR keeps a readable primary draft on a one-letter verifier disagreement', async () => {
   const originalFetch = global.fetch;
   let callCount = 0;
   global.fetch = async () => {
@@ -584,7 +603,44 @@ test('Hebrew Gemini OCR fails closed on a one-letter cross-model disagreement', 
   };
   try {
     const receipt = await parseReceiptImage('/9j/', 'image/jpeg', 'test-key', { pipelineTimeoutMs: 12_000 });
-    assert.equal(receipt, null);
+    assert.equal(receipt.items[0].name, 'פיצה מרגריטה');
+    assert.equal(receipt.ocr.verificationStatus, 'row_disagreement');
+    assert.equal(receipt.ocr.nameVerificationStatus, 'review-required');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('Hebrew Gemini OCR keeps a readable primary draft when verification is unavailable', async () => {
+  const originalFetch = global.fetch;
+  let callCount = 0;
+  global.fetch = async () => {
+    callCount += 1;
+    if (callCount > 1) return { ok: false };
+    return {
+      ok: true,
+      async json() {
+        return {
+          candidates: [{ content: { parts: [{ text: JSON.stringify({
+            storeName: 'מסעדה',
+            date: '2026-08-19',
+            currency: 'NIS',
+            documentLanguage: 'hebrew',
+            receiptTotal: 76,
+            items: [
+              { name: 'פיצה מרגריטה', lineTotal: 62 },
+              { name: 'קולה זירו', lineTotal: 14 },
+            ],
+          }) }] } }],
+        };
+      },
+    };
+  };
+  try {
+    const receipt = await parseReceiptImage('/9j/', 'image/jpeg', 'test-key', { pipelineTimeoutMs: 12_000 });
+    assert.equal(receipt.items.length, 2);
+    assert.equal(receipt.ocr.verificationStatus, 'verification_failed');
+    assert.equal(receipt.ocr.nameVerificationStatus, 'review-required');
   } finally {
     global.fetch = originalFetch;
   }

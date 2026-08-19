@@ -1,7 +1,6 @@
 import { createWorker, PSM } from 'tesseract.js';
 import { assessOcrReadability, haveSamePurchasedRows, inferDocumentLanguage, normalizeOcrName } from './ocrQuality';
 import { reconstructReceiptRows } from './ocrRows';
-import { reconcileReceipt } from './receiptMath';
 
 export interface ParsedBill {
   storeName: string;
@@ -70,9 +69,10 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
     });
     const parsedParts: ParsedBill[] = [];
     const confidences: number[] = [];
+    let hebrewParts = 0;
     let verifiedHebrewParts = 0;
     for (const imageSource of imageSources.slice(0, 6)) {
-      if (timedOut || Date.now() >= deadline) return null;
+      if (timedOut || Date.now() >= deadline) break;
       let ret = await worker.recognize(imageSource, {}, { text: true, blocks: true });
       let receiptText = reconstructReceiptRows(ret.data.blocks) || ret.data.text;
       let parsed = parseReceiptText(receiptText);
@@ -89,53 +89,56 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
         || /(?:×[^\x00-\x7f]){2,}/.test(receiptText);
       let hebrewNameVerified = !firstLanguageIsHebrew;
       if (firstLanguageIsHebrew && parsed && deadline - Date.now() >= 5_000) {
-        // Use three bounded reads with distinct language configurations:
-        // Hebrew+English for layout, English for digits, and Hebrew-only for
-        // an exact item-name verification. A disagreement is never displayed.
-        await worker.reinitialize('eng');
-        await worker.setParameters({
-          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-          preserve_interword_spaces: '1',
-          user_defined_dpi: '300',
-        });
-        const numericRet = await worker.recognize(imageSource, {}, { text: true, blocks: true });
-        const mergedText = reconstructReceiptRows(ret.data.blocks, numericRet.data.blocks) || receiptText;
-        const mergedParsed = parseReceiptText(mergedText);
-        const mergedQuality = mergedParsed
-          ? assessOcrReadability(mergedParsed, {
-              expectedLanguage: 'hebrew',
-              sourceText: mergedText,
-              confidence: ret.data.confidence,
-            })
-          : null;
-        await worker.reinitialize('heb');
-        await worker.setParameters({
-          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-          preserve_interword_spaces: '1',
-          user_defined_dpi: '300',
-        });
-        const hebrewRet = await worker.recognize(imageSource, {}, { text: true, blocks: true });
-        const hebrewText = reconstructReceiptRows(hebrewRet.data.blocks, numericRet.data.blocks) || hebrewRet.data.text;
-        const hebrewParsed = parseReceiptText(hebrewText);
-        const mergedReconciliation = mergedParsed ? reconcileReceipt(mergedParsed) : null;
-        if (mergedQuality?.readable
-          && mergedReconciliation?.receiptTotal !== null
-          && !mergedReconciliation?.needsReview
-          && haveSamePurchasedRows(mergedParsed, hebrewParsed)) {
-          parsed = mergedParsed;
-          quality = mergedQuality;
-          receiptText = mergedText;
-          hebrewNameVerified = true;
-        } else {
-          parsed = null;
-          quality = null;
+        // Use three bounded reads with distinct language configurations.
+        // Exact agreement increases confidence, but a readable primary result
+        // remains available for the visual confirmation screen when the
+        // verifier disagrees or the printed total is incomplete.
+        try {
+          await worker.reinitialize('eng');
+          await worker.setParameters({
+            tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300',
+          });
+          const numericRet = await worker.recognize(imageSource, {}, { text: true, blocks: true });
+          const mergedText = reconstructReceiptRows(ret.data.blocks, numericRet.data.blocks) || receiptText;
+          const mergedParsed = parseReceiptText(mergedText);
+          const mergedQuality = mergedParsed
+            ? assessOcrReadability(mergedParsed, {
+                expectedLanguage: 'hebrew',
+                sourceText: mergedText,
+                confidence: ret.data.confidence,
+              })
+            : null;
+          await worker.reinitialize('heb');
+          await worker.setParameters({
+            tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300',
+          });
+          const hebrewRet = await worker.recognize(imageSource, {}, { text: true, blocks: true });
+          const hebrewText = reconstructReceiptRows(hebrewRet.data.blocks, numericRet.data.blocks) || hebrewRet.data.text;
+          const hebrewParsed = parseReceiptText(hebrewText);
+          if (mergedQuality?.readable) {
+            parsed = mergedParsed;
+            quality = mergedQuality;
+            receiptText = mergedText;
+            hebrewNameVerified = haveSamePurchasedRows(mergedParsed, hebrewParsed);
+          }
+        } catch (_) {
+          // Verification is best-effort. The already-readable primary result
+          // is still shown beside the receipt image for explicit review.
+          hebrewNameVerified = false;
+        } finally {
+          if (!timedOut) {
+            await worker.reinitialize('heb+eng').catch(() => {});
+            await worker.setParameters({
+              tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+              preserve_interword_spaces: '1',
+              user_defined_dpi: '300',
+            }).catch(() => {});
+          }
         }
-        await worker.reinitialize('heb+eng');
-        await worker.setParameters({
-          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-          preserve_interword_spaces: '1',
-          user_defined_dpi: '300',
-        });
       }
 
       // Sparse text is strong for separated receipt rows. A bounded second
@@ -162,10 +165,13 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
         await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
       }
 
-      if (parsed?.items?.length && quality?.readable && hebrewNameVerified) {
+      if (parsed?.items?.length && quality?.readable) {
         parsedParts.push(parsed);
         confidences.push(Number(ret.data.confidence) || 0);
-        if (firstLanguageIsHebrew) verifiedHebrewParts += 1;
+        if (firstLanguageIsHebrew) {
+          hebrewParts += 1;
+          if (hebrewNameVerified) verifiedHebrewParts += 1;
+        }
       }
     }
     if (parsedParts.length === 0) return null;
@@ -183,13 +189,6 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
       confidence: averageConfidence,
     });
     if (!quality.readable) return null;
-    const reconciliation = reconcileReceipt(receipt);
-    if (
-      (documentLanguage === 'hebrew' || documentLanguage === 'mixed')
-      && (reconciliation.receiptTotal === null || reconciliation.needsReview)
-    ) {
-      return null;
-    }
     return {
       ...receipt,
       documentLanguage,
@@ -201,9 +200,11 @@ export async function scanBillImagesInBrowser(imageSources: string[], timeoutMs 
         readabilityScore: quality.score,
         hebrewCharacterRatio: quality.hebrewCharacterRatio,
         confidence: Math.round(averageConfidence * 10) / 10,
-        nameVerificationStatus: verifiedHebrewParts > 0
+        nameVerificationStatus: hebrewParts > 0 && verifiedHebrewParts === hebrewParts
           ? 'dual-hebrew-pass-agreement'
-          : 'not-required',
+          : ((documentLanguage === 'hebrew' || documentLanguage === 'mixed')
+            ? 'single-hebrew-pass-review'
+            : 'not-required'),
       },
     };
   } catch (err) {
