@@ -144,7 +144,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             }`}
           >
             <QrCode className="w-3.5 h-3.5" />
-            <span>1. QR Code</span>
+            <span>{t('tabQrCode', undefined, 'QR Code')}</span>
           </button>
 
           <button
@@ -156,7 +156,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             }`}
           >
             <Link className="w-3.5 h-3.5" />
-            <span>2. Share Link</span>
+            <span>{t('tabShareLink', undefined, 'Share Link')}</span>
           </button>
 
           {onAddFriend && (
@@ -165,11 +165,11 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               className={`py-2 px-1 rounded-xl flex flex-col items-center gap-1 transition-all ${
                 activeTab === 'friend'
                   ? 'bg-white dark:bg-slate-800 text-slate-950 dark:text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>3. Add Friend</span>
+              <span>{t('tabAddFriend', undefined, 'Add Friend')}</span>
             </button>
           )}
         </div>
@@ -191,7 +191,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               )}
             </div>
             <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 font-medium">
-              Scan with phone camera on the same Wi-Fi network
+              {t('scanCameraWifiHint', undefined, 'Scan with phone camera to join instantly')}
             </p>
           </div>
         )}
@@ -201,7 +201,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
           <div className="space-y-3 animate-fadeIn">
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
               <span className="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">
-                Direct Room URL
+                {t('directRoomUrl', undefined, 'Direct Room URL')}
               </span>
               <p className="text-xs font-mono text-slate-800 dark:text-slate-200 break-all select-all font-semibold">
                 {joinUrl}
@@ -233,13 +233,13 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
           <form onSubmit={handleAddFriendSubmit} className="space-y-3 animate-fadeIn">
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                Friend's Display Name
+                {t('friendsDisplayName', undefined, "Friend's Display Name")}
               </label>
               <input
                 type="text"
                 value={friendNameInput}
                 onChange={(e) => setFriendNameInput(e.target.value)}
-                placeholder="e.g. Tomer"
+                placeholder={t('nameInputPlaceholder', undefined, 'e.g. Naor')}
                 className="w-full py-2.5 px-3 rounded-xl photo-input text-xs font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
                 required
               />
@@ -247,7 +247,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
 
             {friendAddedMsg && (
               <p className="text-xs text-slate-900 dark:text-white font-extrabold text-center">
-                Friend added to room! ✓
+                {t('friendAddedToRoom', undefined, 'Friend added to room! ✓')}
               </p>
             )}
 
@@ -256,7 +256,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               className="w-full py-3 rounded-full bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-black text-xs hover:bg-slate-900 transition-all shadow-sm flex items-center justify-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Add Friend to Room</span>
+              <span>{t('addFriendToRoomBtn', undefined, 'Add Friend to Room')}</span>
             </button>
           </form>
         )}

@@ -570,10 +570,10 @@ test('OCR verification uses a different pinned model from the primary read', asy
   };
   try {
     const receipt = await parseReceiptImage('/9j/', 'image/jpeg', 'test-key', { pipelineTimeoutMs: 12_000 });
-    assert.match(endpoints[0], /gemini-2\.5-flash:generateContent/);
-    assert.match(endpoints[1], /gemini-2\.5-flash-lite:generateContent/);
+    assert.match(endpoints[0], /gemini-2\.0-flash:generateContent/);
+    assert.match(endpoints[1], /gemini-1\.5-flash:generateContent/);
     assert.equal(receipt.ocr.verificationStatus, 'cross_model_agreement');
-    assert.equal(receipt.ocr.verificationModelName, 'gemini-2.5-flash-lite');
+    assert.equal(receipt.ocr.verificationModelName, 'gemini-1.5-flash');
   } finally {
     global.fetch = originalFetch;
   }

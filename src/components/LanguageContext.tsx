@@ -5,9 +5,11 @@ import { Sparkles, Phone, User, Globe, LogOut } from 'lucide-react';
 import defaultTranslations, { translations as namedTranslations, formatCurrency, convertCurrency, formatDualPrice, updateLiveExchangeRates } from '../../lib/i18n';
 import { getCookie, setCookie } from '../../lib/cookies';
 
-const i18nDictionary: Record<string, Record<string, string>> = defaultTranslations || namedTranslations || {};
+const rawDictionary: any = defaultTranslations || namedTranslations || {};
+const i18nDictionary: Record<string, Record<string, string>> = 
+  (rawDictionary?.en || rawDictionary?.he) ? rawDictionary : (rawDictionary?.default || rawDictionary?.translations || {});
 
-export const DEFAULT_REAL_AVATAR = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80';
+export const DEFAULT_REAL_AVATAR = '';
 
 type Language = 'en' | 'he';
 type Currency = 'USD' | 'NIS';
@@ -425,7 +427,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 event.preventDefault();
                 const displayName = guestName.trim();
                 if (!displayName) return;
-                setProfile({ displayName, avatarColor: '#0F172A', avatarUrl: DEFAULT_REAL_AVATAR });
+                setProfile({ displayName, avatarColor: '#0F172A', avatarUrl: undefined });
               }}
             >
               <input

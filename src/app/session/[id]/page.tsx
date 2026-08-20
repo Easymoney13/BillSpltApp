@@ -681,20 +681,22 @@ function SessionWorkspaceInner() {
         hideCode={Boolean(session.groupId)}
       />
 
-      {/* Real-Time Members List - Compact & Classic Design */}
-      <div className="photo-card p-4 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-[#222C3D] shadow-soft space-y-3">
+      {/* Real-Time Members List - Vibrant Modern Design */}
+      <div className="photo-card p-4 bg-white dark:bg-[#141B28] border border-slate-200/80 dark:border-white/10 shadow-md space-y-3.5 rounded-2xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-slate-900 dark:text-white" />
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white">{t('roomMembersTitle', undefined, 'Room Members')}</h3>
-            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300">
+            <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+              <Users className="w-4 h-4" />
+            </div>
+            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">{t('roomMembersTitle', undefined, 'Room Members')}</h3>
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-black border border-indigo-500/20">
               {validMembers.length}
             </span>
           </div>
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="py-1 px-3 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white text-xs font-extrabold flex items-center gap-1 transition-all shadow-sm active:scale-95"
+            className="py-1.5 px-3.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20 active:scale-95"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>{t('inviteBtn', undefined, 'Invite')}</span>
@@ -702,31 +704,38 @@ function SessionWorkspaceInner() {
         </div>
 
         {/* Member Avatars Horizontal Scroll */}
-        <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-1 scrollbar-none">
-          {validMembers.map((member: any) => {
+        <div className="flex items-center gap-2.5 overflow-x-auto pb-1 pt-0.5 scrollbar-none">
+          {validMembers.map((member: any, mIdx: number) => {
             const isMe = member?.id === currentMemberId;
             const validName = member?.name && member?.name.trim() !== '?' ? member.name.trim() : 'Guest';
+            const MEMBER_PALETTES = [
+              { bg: 'bg-indigo-500/15 dark:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 border-indigo-500/30', icon: 'bg-indigo-500 text-white' },
+              { bg: 'bg-orange-500/15 dark:bg-orange-500/25 text-orange-700 dark:text-orange-300 border-orange-500/30', icon: 'bg-orange-500 text-white' },
+              { bg: 'bg-emerald-500/15 dark:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border-emerald-500/30', icon: 'bg-emerald-500 text-white' },
+              { bg: 'bg-pink-500/15 dark:bg-pink-500/25 text-pink-700 dark:text-pink-300 border-pink-500/30', icon: 'bg-pink-500 text-white' },
+              { bg: 'bg-sky-500/15 dark:bg-sky-500/25 text-sky-700 dark:text-sky-300 border-sky-500/30', icon: 'bg-sky-500 text-white' },
+              { bg: 'bg-purple-500/15 dark:bg-purple-500/25 text-purple-700 dark:text-purple-300 border-purple-500/30', icon: 'bg-purple-500 text-white' },
+            ];
+            const palette = MEMBER_PALETTES[mIdx % MEMBER_PALETTES.length];
 
             return (
               <div
                 key={member?.id}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 shrink-0 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${palette.bg} border shrink-0 text-xs font-bold shadow-2xs transition-all hover:scale-105`}
               >
-                <div className="w-5 h-5 rounded-full flex items-center justify-center bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 shrink-0">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                  </svg>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${palette.icon} text-[10px] font-black shrink-0 shadow-xs`}>
+                  {validName.charAt(0).toUpperCase()}
                 </div>
 
                 <span>{validName} {isMe ? t('youSuffix', undefined, '(You)') : ''}</span>
 
                 {member?.isHost && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-slate-900 dark:bg-white text-[9px] font-extrabold text-white dark:text-slate-900">
+                  <span className="px-1.5 py-0.5 rounded-md bg-gradient-to-r from-amber-500 to-orange-500 text-[9px] font-black text-white shadow-2xs uppercase tracking-wider">
                     {t('hostBadge', undefined, 'HOST')}
                   </span>
                 )}
                 {member?.settled && (
-                  <span className="text-slate-900 dark:text-white text-xs font-bold">✓</span>
+                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-black shadow-xs">✓</span>
                 )}
               </div>
             );
@@ -735,29 +744,31 @@ function SessionWorkspaceInner() {
 
         {/* Dedicated Clean Attach to Group Bar */}
         {session.groupId ? (
-          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-extrabold">
+          <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/25 text-indigo-900 dark:text-indigo-200 text-xs font-extrabold">
             <span className="flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-slate-900 dark:text-white" />
+              <Link2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>{t('billAttachedToGroup', undefined, 'Bill Attached to Group')}</span>
             </span>
-            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm">
+            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs">
               {t('linkedBadge', undefined, 'LINKED ✓')}
             </span>
           </div>
         ) : (
           <button
             onClick={() => setShowAttachGroupModal(true)}
-            className="w-full py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-extrabold flex items-center justify-center gap-2 transition-all border border-dashed border-slate-300 dark:border-slate-700 active:scale-95 shadow-sm"
+            className="w-full py-2.5 px-3 rounded-xl bg-slate-50 dark:bg-[#1A2232] hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-300 text-xs font-extrabold flex items-center justify-center gap-2 transition-all border border-dashed border-slate-300 dark:border-white/10 hover:border-indigo-400 dark:hover:border-indigo-500/40 active:scale-95 shadow-2xs group"
           >
-            <Link2 className="w-4 h-4 text-slate-900 dark:text-white" />
+            <Link2 className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" />
             <span>{t('attachBillTitle', undefined, 'Attach Bill to Group')} 🔗</span>
           </button>
         )}
 
-        {/* Dedicated "Who paid?" Selector Bar - Clean, spacious & uncluttered */}
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs gap-2">
+        {/* Dedicated "Who paid?" Selector Bar */}
+        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#1A2232] border border-slate-200/80 dark:border-white/5 text-xs gap-2">
           <div className="flex items-center gap-2 shrink-0">
-            <CreditCard className="w-4 h-4 text-slate-900 dark:text-white shrink-0" />
+            <div className="w-6 h-6 rounded-md bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-500/20">
+              <CreditCard className="w-3.5 h-3.5" />
+            </div>
             <span className="font-extrabold text-slate-900 dark:text-white text-xs">
               {t('whoPaidShort', undefined, 'Who paid?')}
             </span>
@@ -767,7 +778,7 @@ function SessionWorkspaceInner() {
             value={activePayerId}
             onChange={(e) => sendAction('SET_PAYER', { payerId: e.target.value })}
             disabled={!isCurrentUserHost || isAccountingLocked}
-            className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-white shadow-xs focus:ring-2 focus:ring-slate-900/20 cursor-pointer max-w-[220px] truncate"
+            className="py-1.5 px-3 rounded-lg bg-white dark:bg-[#121824] text-xs font-bold border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white shadow-2xs focus:ring-2 focus:ring-indigo-500/30 cursor-pointer max-w-[220px] truncate"
           >
             <option value="each">👥 {t('eachPaidShareOption', undefined, 'Each paid their share')}</option>
             {validMembers.map((m: any) => (
@@ -781,7 +792,7 @@ function SessionWorkspaceInner() {
 
 
       {/* Shared Receipt Items Section */}
-      <div className="flex-1 space-y-4">
+      <div className="flex-1 space-y-4 pt-1">
         {isSessionClosed && (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center text-sm font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-200">
             {t('sessionClosedNotice', undefined, 'This session is settled and is now read-only.')}
@@ -792,48 +803,36 @@ function SessionWorkspaceInner() {
             {t('paymentAllocationLocked', undefined, 'Items, payer and tip are locked while a member is marked paid. That member can reopen their share before further edits.')}
           </div>
         )}
-        {session?.reconciliation?.needsReview && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
-            <p className="font-extrabold">{t('receiptNeedsReviewTitle', undefined, 'Please review the scanned prices')}</p>
-            <p className="mt-1 text-[11px] opacity-80">
-              {session.reconciliation.receiptTotal == null
-                ? t('receiptNeedsReviewMissingTotal', undefined, 'The printed receipt total could not be verified. Review the scanned items before splitting.')
-                : t('receiptNeedsReviewMismatch', {
-                    itemsTotal: session.reconciliation.calculatedTotal?.toFixed?.(2) || session.reconciliation.itemTotal?.toFixed?.(2),
-                    receiptTotal: session.reconciliation.receiptTotal?.toFixed?.(2),
-                  }, `The scanned items total ${session.reconciliation.calculatedTotal?.toFixed?.(2) || session.reconciliation.itemTotal?.toFixed?.(2)}, while the receipt shows ${session.reconciliation.receiptTotal?.toFixed?.(2)}. Edit any OCR mistakes before splitting.`)}
-            </p>
-          </div>
-        )}
-        <div className="flex items-center justify-between">
+        
+        <div className="flex items-center justify-between px-1">
           <div>
-            <h2 className="font-bold text-lg text-slate-900 dark:text-white">{t('receiptItemsTitle', undefined, 'Receipt Items')}</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('tapItemToClaim', undefined, 'Tap item to claim & split cost')}</p>
+            <h2 className="font-black text-lg text-slate-900 dark:text-white tracking-tight">{t('receiptItemsTitle', undefined, 'Receipt Items')}</h2>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('tapItemToClaim', undefined, 'Tap item to claim & split cost')}</p>
           </div>
 
           {isCurrentUserHost && !hasSettledMembers && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowAddItemModal(true)}
-                className="py-1.5 px-3 rounded-full bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-slate-200 text-xs font-extrabold flex items-center gap-1 transition-all border border-slate-200 dark:border-white/5 active:scale-95"
+                className="py-1.5 px-3 rounded-full bg-white dark:bg-[#1A2232] hover:bg-slate-100 dark:hover:bg-[#222C3D] text-slate-800 dark:text-slate-200 text-xs font-extrabold flex items-center gap-1 transition-all border border-slate-200/80 dark:border-white/10 active:scale-95 shadow-2xs"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5 text-indigo-500" />
                 <span>{t('addItemBtn', undefined, 'Add Item')}</span>
               </button>
 
               <button
                 onClick={() => sendAction('SPLIT_EVERYONE', {})}
-                className="py-1.5 px-3.5 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                className="py-1.5 px-3.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-indigo-500/20 active:scale-95"
               >
-                <Zap className="w-3.5 h-3.5 fill-current" />
+                <Zap className="w-3.5 h-3.5 fill-current text-amber-300" />
                 <span>{t('splitAllBtn', undefined, 'Split All')}</span>
               </button>
             </div>
           )}
         </div>
 
-        {/* Item Cards List grouped inside a single container with low-opacity dividers */}
-        <div className="bg-white dark:bg-[#1A1A1A] rounded-2xl border border-slate-150 dark:border-white/5 divide-y divide-slate-100 dark:divide-white/5 overflow-hidden shadow-soft">
+        {/* Item Cards List grouped inside a single container with rich styling */}
+        <div className="bg-white dark:bg-[#141B28] rounded-2xl border border-slate-200/80 dark:border-white/10 divide-y divide-slate-100 dark:divide-white/5 overflow-hidden shadow-md">
           {validItems.map((item: any) => {
             const claimants = Array.isArray(item?.claimedBy) ? item.claimedBy : [];
             const isClaimedByMe = claimants.includes(currentMemberId);
@@ -842,31 +841,69 @@ function SessionWorkspaceInner() {
             const splitPrice = splitCount > 0 ? itemPrice / splitCount : itemPrice;
             const activeCurr = session?.currency || langCtx?.currency || 'NIS';
 
+            // Distinctive Category Styling
+            const cat = (item?.category || '').toLowerCase();
+            let catStyle = {
+              badgeBg: 'bg-amber-500/15 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30',
+              iconBg: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+            };
+            if (cat.includes('food') || cat.includes('dining') || cat.includes('אוכל') || cat.includes('מסעד')) {
+              catStyle = {
+                badgeBg: 'bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30',
+                iconBg: 'bg-orange-500/15 text-orange-500 border-orange-500/25',
+              };
+            } else if (cat.includes('drink') || cat.includes('beverage') || cat.includes('bar') || cat.includes('שתיי') || cat.includes('בר')) {
+              catStyle = {
+                badgeBg: 'bg-cyan-500/15 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+                iconBg: 'bg-cyan-500/15 text-cyan-500 border-cyan-500/25',
+              };
+            } else if (cat.includes('dessert') || cat.includes('קינוח') || cat.includes('sweet') || cat.includes('מתוק')) {
+              catStyle = {
+                badgeBg: 'bg-rose-500/15 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/30',
+                iconBg: 'bg-rose-500/15 text-rose-500 border-rose-500/25',
+              };
+            } else if (cat.includes('grocer') || cat.includes('סופר')) {
+              catStyle = {
+                badgeBg: 'bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+                iconBg: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
+              };
+            } else if (cat.includes('travel') || cat.includes('טיול') || cat.includes('flight') || cat.includes('מלון')) {
+              catStyle = {
+                badgeBg: 'bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
+                iconBg: 'bg-indigo-500/15 text-indigo-500 border-indigo-500/25',
+              };
+            } else if (cat.includes('shop') || cat.includes('בגדים') || cat.includes('shopping')) {
+              catStyle = {
+                badgeBg: 'bg-purple-500/15 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30',
+                iconBg: 'bg-purple-500/15 text-purple-500 border-purple-500/25',
+              };
+            }
+
             return (
               <div
                 key={item?.id}
                 onClick={isAccountingLocked ? undefined : () => sendAction('TOGGLE_CLAIM', { itemId: item?.id, memberId: currentMemberId, claimed: !isClaimedByMe })}
-                className={`relative p-5 transition-all flex flex-col ${isAccountingLocked ? '' : 'cursor-pointer'} ${
+                className={`relative p-4 sm:p-5 transition-all flex flex-col ${isAccountingLocked ? '' : 'cursor-pointer'} ${
                   isClaimedByMe
-                    ? 'bg-slate-100/70 dark:bg-white/5'
-                    : 'hover:bg-slate-50/50 dark:hover:bg-white/[0.01]'
+                    ? 'bg-indigo-500/[0.07] dark:bg-indigo-500/[0.12]'
+                    : 'hover:bg-slate-50/70 dark:hover:bg-white/[0.02]'
                 }`}
               >
                 {/* Visual left accent bar when claimed */}
                 {isClaimedByMe && (
-                  <div className="absolute top-0 bottom-0 w-1 bg-slate-900 dark:bg-white ltr:left-0 rtl:right-0" />
+                  <div className="absolute top-0 bottom-0 w-1.5 bg-gradient-to-b from-indigo-500 to-purple-600 ltr:left-0 rtl:right-0 shadow-sm" />
                 )}
 
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex items-center gap-3">
                     {/* Item Category Icon on the Left */}
-                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/80 text-slate-700 dark:text-zinc-300 border border-slate-100 dark:border-white/5 shrink-0">
+                    <div className={`p-2.5 rounded-xl ${catStyle.iconBg} border shrink-0 group-hover:scale-105 transition-transform`}>
                       {getItemIcon(item?.category)}
                     </div>
 
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <h3 className="font-bold text-slate-900 dark:text-white text-sm md:text-base leading-tight">
+                        <h3 className="font-extrabold text-slate-900 dark:text-white text-sm sm:text-base leading-tight">
                           {item?.name || 'Item'}
                         </h3>
 
@@ -875,7 +912,7 @@ function SessionWorkspaceInner() {
                           <button
                             type="button"
                             onClick={(e) => handleOpenEditModal(item, e)}
-                            className="p-1 rounded-full text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                            className="p-1 rounded-full text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
                             title={t('editItemTitle', undefined, 'Edit Item')}
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -883,39 +920,37 @@ function SessionWorkspaceInner() {
                         )}
                       </div>
 
-                      <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-semibold px-2 py-0.5 rounded bg-slate-50 dark:bg-zinc-800/40 border border-slate-150 dark:border-white/5 inline-block mt-1">
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-md ${catStyle.badgeBg} border inline-block mt-1 uppercase tracking-wider`}>
                         {t(`cat${item?.category}`, undefined, item?.category || 'General')}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-right">
+                  <div className="text-right rtl:text-left">
                     {(() => {
                       type DualPriceResult = { primary: string; secondary?: string };
                       const itemDual: DualPriceResult = formatDual ? formatDual(itemPrice, activeCurr) : { primary: `${itemPrice}` };
                       return (
-                        <>
-                          <div className="flex flex-col items-end">
-                            <span className="text-sm md:text-base font-bold text-slate-900 dark:text-white">
-                              {itemDual?.primary || `${itemPrice}`}
+                        <div className="flex flex-col items-end rtl:items-start">
+                          <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                            {itemDual?.primary || `${itemPrice}`}
+                          </span>
+                          {itemDual?.secondary && (
+                            <span className="text-[11px] font-bold text-slate-400 block mt-0.5">
+                              ({itemDual.secondary})
                             </span>
-                            {itemDual?.secondary && (
-                              <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400 block mt-0.5">
-                                ({itemDual.secondary})
-                              </span>
-                            )}
-                          </div>
-                        </>
+                          )}
+                        </div>
                       );
                     })()}
                   </div>
                 </div>
 
                 {/* Claimants list: neatly aligned */}
-                <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 dark:border-white/5">
+                <div className="flex items-center justify-between pt-3 mt-2.5 border-t border-slate-100 dark:border-white/5">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {claimants.length === 0 ? (
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2.5 py-0.5 rounded-full">
                         {t('availableLabel', undefined, 'Available')}
                       </span>
                     ) : (
@@ -927,16 +962,15 @@ function SessionWorkspaceInner() {
                         return (
                           <div
                             key={cId}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold transition-all ${
                               isMeClaimant
-                                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                                : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200/50 dark:border-white/5'
+                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
+                                : 'bg-slate-100 dark:bg-[#1A2232] text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-white/5'
                             }`}
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                            </svg>
-
+                            <span className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center text-[9px]">
+                              {fullName.charAt(0).toUpperCase()}
+                            </span>
                             <span>{fullName}</span>
                             {isMeClaimant && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                           </div>
@@ -946,7 +980,7 @@ function SessionWorkspaceInner() {
                   </div>
 
                   {splitCount > 1 && (
-                    <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 shrink-0 pl-2">
+                    <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0 pl-2 rtl:pr-2">
                       {(() => {
                         type DualPriceResult = { primary: string; secondary?: string };
                         const splitDual: DualPriceResult = formatDual ? formatDual(splitPrice, activeCurr) : { primary: `${splitPrice}` };
@@ -1398,12 +1432,10 @@ function SessionWorkspaceInner() {
                       return;
                     }
 
-                    // Only a host closure is canonical history. A member who
-                    // marks their share paid stays in the live room.
-                    if (isCurrentUserHost) try {
-                      const userKey = (profile?.displayName || '').trim().toLowerCase();
-                      const existingLocal = localStorage.getItem(`billsplit_history_${userKey}`);
-                      const localList = existingLocal ? JSON.parse(existingLocal) : [];
+                    // Save to user history upon settlement
+                    try {
+                      const rawName = (profile?.displayName || '').trim();
+                      const userKey = rawName.toLowerCase();
                       const histRecord = {
                         id: session.id,
                         storeName: session.storeName || 'Bill Session',
@@ -1411,14 +1443,28 @@ function SessionWorkspaceInner() {
                         totalAmount: memberCalculations.grandTotal || 0,
                         userShare: finalDueVal || memberCalculations.myShare || 0,
                         currency: session.currency || 'NIS',
-                        membersCount: validMembers.length,
+                        membersCount: validMembers.length || 1,
                         groupId: session.groupId,
                         payerName: activePayerName,
                         createdAt: Date.now(),
+                        settledAt: Date.now(),
+                        status: 'settled',
                       };
-                      const filteredLocal = Array.isArray(localList) ? localList.filter((h: any) => h.id !== session.id) : [];
-                      filteredLocal.unshift(histRecord);
-                      localStorage.setItem(`billsplit_history_${userKey}`, JSON.stringify(filteredLocal));
+
+                      // Update user-specific and global history stores
+                      [
+                        `billsplit_history_${userKey}`,
+                        rawName ? `billsplit_history_${rawName}` : null,
+                        'billsplit_history'
+                      ].filter(Boolean).forEach((key) => {
+                        try {
+                          const existing = localStorage.getItem(key!);
+                          const list = existing ? JSON.parse(existing) : [];
+                          const filtered = Array.isArray(list) ? list.filter((h: any) => h.id !== session.id) : [];
+                          filtered.unshift(histRecord);
+                          localStorage.setItem(key!, JSON.stringify(filtered));
+                        } catch (_) {}
+                      });
                     } catch (e) {
                       console.error('Error saving local history:', e);
                     }
@@ -1437,24 +1483,24 @@ function SessionWorkspaceInner() {
                       setIsSettling('idle');
                     }, 1400);
                   }}
-                  className={`w-full py-4 rounded-full bg-black dark:bg-black text-white font-black text-sm border border-white/20 hover:border-white/40 shadow-2xl flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] text-center relative overflow-hidden group select-none ${
-                    isSettling === 'success' ? 'ring-4 ring-white/30 bg-neutral-900' : ''
+                  className={`w-full py-4 rounded-full bg-white dark:bg-white text-black dark:text-black font-black text-sm border border-slate-200 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-slate-100 shadow-2xl flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] text-center relative overflow-hidden group select-none ${
+                    isSettling === 'success' ? 'ring-4 ring-black/20 dark:ring-white/30 bg-white' : ''
                   }`}
                 >
                   {isSettling === 'loading' ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin text-white" />
-                      <span>{isCurrentUserHost ? t('settlingSession', undefined, 'Settling Session...') : t('markingPaid', undefined, 'Marking Paid...')}</span>
+                      <Loader2 className="w-5 h-5 animate-spin text-black" />
+                      <span className="text-black">{isCurrentUserHost ? t('settlingSession', undefined, 'Settling Session...') : t('markingPaid', undefined, 'Marking Paid...')}</span>
                     </>
                   ) : isSettling === 'success' ? (
                     <>
-                      <CheckCircle2 className="w-5 h-5 text-white animate-scaleUp" />
-                      <span className="animate-fadeIn">{t('settledSuccessMsg', undefined, 'Settled Successfully! 🎉')}</span>
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 animate-scaleUp" />
+                      <span className="animate-fadeIn text-black">{t('settledSuccessMsg', undefined, 'Settled Successfully! 🎉')}</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
-                      <span>
+                      <CheckCircle2 className="w-5 h-5 text-black group-hover:scale-110 transition-transform" />
+                      <span className="text-black">
                         {isCurrentUserHost
                           ? t('settleAndCloseSessionBtn', undefined, 'Settle Payment & Close Session')
                           : t('markPaidBtn', undefined, 'Mark My Share as Paid')}

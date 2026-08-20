@@ -30,7 +30,8 @@ import {
   Plane,
   Wine,
   Box,
-  Pencil
+  Pencil,
+  LockOpen
 } from 'lucide-react';
 import { useLanguage, DEFAULT_REAL_AVATAR } from '../components/LanguageContext';
 import { CameraViewfinder } from '../components/CameraViewfinder';
@@ -191,24 +192,50 @@ export default function HomePage() {
       return;
     }
 
-    const userKey = profile.displayName || '';
+    const rawName = profile.displayName.trim();
+    const userKey = rawName.toLowerCase();
     const userGroupsKey = `billsplit_user_groups_${userKey}`;
-    const savedGroups = localStorage.getItem(userGroupsKey) || localStorage.getItem('billsplit_user_groups');
+
+    // Load local groups immediately (user-specific only)
+    const savedGroups = localStorage.getItem(userGroupsKey) 
+      || localStorage.getItem(`billsplit_user_groups_${rawName}`);
     if (savedGroups) {
       try {
-        setUserGroups(JSON.parse(savedGroups));
+        const parsed = JSON.parse(savedGroups);
+        if (Array.isArray(parsed)) {
+          const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
+          const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+          setUserGroups(parsed.filter((g: any) => !deletedIds.includes(g.id)));
+        }
+      } catch (e) {}
+    } else {
+      setUserGroups([]);
+    }
+
+    // Load local history immediately (user-specific with fallback)
+    const rawLocalHist = localStorage.getItem(`billsplit_history_${userKey}`)
+      || localStorage.getItem(`billsplit_history_${rawName}`)
+      || localStorage.getItem('billsplit_history');
+    if (rawLocalHist) {
+      try {
+        const parsed = JSON.parse(rawLocalHist);
+        if (Array.isArray(parsed)) {
+          const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
+          const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+          setHistoryList(parsed.filter((item: any) => !deletedIds.includes(item.id)));
+        }
       } catch (e) {}
     }
 
     const queryParams = new URLSearchParams({
-      userName: profile.displayName || '',
-      phone: ''
+      userName: rawName,
+      phone: profile.phoneNumber || ''
     }).toString();
 
     // Fetch user-specific active groups from server
     fetchPaginatedAccountData('/api/user/groups', queryParams, 'groups')
       .then((groups) => {
-        if (groups) {
+        if (Array.isArray(groups)) {
           const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
           const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
           const filtered = groups.filter((g: any) => !deletedIds.includes(g.id));
@@ -218,34 +245,54 @@ export default function HomePage() {
       })
       .catch(() => {});
 
-
-    // Fetch user-specific history from server
+    // Fetch user-specific history from server and merge with local history
     fetchPaginatedAccountData('/api/history', queryParams, 'history')
-      .then((history) => {
-        if (Array.isArray(history)) {
-          const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
-          const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
-          const filtered = history
-            .filter((item: any) => !deletedIds.includes(item.id))
-            .sort((first: any, second: any) => {
-              const firstTime = Number(first.settledAt || first.createdAt || (first.date ? new Date(first.date).getTime() : 0));
-              const secondTime = Number(second.settledAt || second.createdAt || (second.date ? new Date(second.date).getTime() : 0));
-              return secondTime - firstTime || String(first.id || '').localeCompare(String(second.id || ''));
-            });
-          setHistoryList(filtered);
-          localStorage.setItem(`billsplit_history_${userKey}`, JSON.stringify(filtered));
+      .then((serverHistory) => {
+        const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
+        const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+
+        let mergedList = Array.isArray(serverHistory) ? [...serverHistory] : [];
+
+        // Merge in local items that might not have reached server yet
+        const rawLocal = localStorage.getItem(`billsplit_history_${userKey}`)
+          || localStorage.getItem(`billsplit_history_${rawName}`)
+          || localStorage.getItem('billsplit_history');
+        if (rawLocal) {
+          try {
+            const localArr = JSON.parse(rawLocal);
+            if (Array.isArray(localArr)) {
+              localArr.forEach((loc) => {
+                if (loc?.id && !mergedList.some((s) => s.id === loc.id)) {
+                  mergedList.push(loc);
+                }
+              });
+            }
+          } catch (_) {}
         }
+
+        const filtered = mergedList
+          .filter((item: any) => !deletedIds.includes(item.id))
+          .sort((first: any, second: any) => {
+            const firstTime = Number(first.settledAt || first.createdAt || (first.date ? new Date(first.date).getTime() : 0));
+            const secondTime = Number(second.settledAt || second.createdAt || (second.date ? new Date(second.date).getTime() : 0));
+            return secondTime - firstTime || String(first.id || '').localeCompare(String(second.id || ''));
+          });
+        setHistoryList(filtered);
+        localStorage.setItem(`billsplit_history_${userKey}`, JSON.stringify(filtered));
+        localStorage.setItem('billsplit_history', JSON.stringify(filtered));
       })
       .catch(() => {
-        const localHist = localStorage.getItem(`billsplit_history_${userKey}`);
-        if (localHist) {
-          const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
-          const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
-          const parsed = JSON.parse(localHist);
-          const filtered = parsed.filter((item: any) => !deletedIds.includes(item.id));
-          setHistoryList(filtered);
-        } else {
-          setHistoryList([]);
+        const rawLocal = localStorage.getItem(`billsplit_history_${userKey}`)
+          || localStorage.getItem(`billsplit_history_${rawName}`)
+          || localStorage.getItem('billsplit_history');
+        if (rawLocal) {
+          try {
+            const localDeleted = localStorage.getItem('billsplit_deleted_history_ids');
+            const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+            const parsed = JSON.parse(rawLocal);
+            const filtered = parsed.filter((item: any) => !deletedIds.includes(item.id));
+            setHistoryList(filtered);
+          } catch (e) {}
         }
       });
   }, [profile.displayName]);
@@ -603,20 +650,26 @@ export default function HomePage() {
                   {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
                 </button>
 
-                {/* Real Avatar Profile Image Button */}
+                {/* Avatar Profile Image / Icon Button */}
                 <button
                   onClick={() => {
                     setActiveTab('settings');
                     triggerHaptic('light');
                   }}
-                  className="relative w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-slate-300 to-slate-100 dark:from-slate-700 dark:to-slate-900 border-2 border-white dark:border-slate-700 overflow-hidden shadow-sm hover:scale-105 active:scale-95 transition-all focus:outline-none shrink-0"
-                  title={profile.displayName || 'James'}
+                  className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-full p-0.5 bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs hover:scale-105 active:scale-95 transition-all focus:outline-none shrink-0 flex items-center justify-center"
+                  title={profile.displayName || 'User'}
                 >
-                  <img
-                    src={profile.avatarUrl || DEFAULT_REAL_AVATAR}
-                    alt={profile.displayName || 'User Avatar'}
-                    className="w-full h-full rounded-full object-cover"
-                  />
+                  {profile.avatarUrl && !profile.avatarUrl.includes('unsplash') ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt={profile.displayName || 'User Avatar'}
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-200">
+                      <User className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                  )}
                 </button>
               </div>
             </header>
@@ -628,6 +681,7 @@ export default function HomePage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white animate-pulse" />
+                      <LockOpen className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">
                         {t('activeSplitTitle', undefined, 'Active Split')}
                       </span>
@@ -753,100 +807,90 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* YOUR ACTIVE GROUPS LIST (Matching Picture 1 with Rich Colorful Badges) */}
+            {/* YOUR ACTIVE GROUPS LIST (Real user-joined groups only) */}
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
                   {t('yourActiveGroupsHeader', undefined, 'Your active groups')}
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateGroupModal(true);
-                    triggerHaptic('light');
-                  }}
-                  className="text-xs font-extrabold text-indigo-500 hover:text-indigo-400 dark:text-indigo-400 transition-colors"
-                >
-                  {t('seeAll', undefined, 'See All')}
-                </button>
               </div>
 
-              <div className="space-y-2.5">
-                {(userGroups.length > 0
-                  ? userGroups
-                  : [
-                      { id: 'starter-1', name: "Friends' Dinner", membersCount: 4, icon: Utensils },
-                      { id: 'starter-2', name: 'Weekend Trip', membersCount: 6, icon: Plane },
-                    ]
-                ).map((g: any, idx: number) => {
-                  const GroupIcon = g.icon || (idx % 2 === 0 ? Utensils : Users);
-                  const isStarter = typeof g.id === 'string' && g.id.startsWith('starter-');
+              {userGroups.length === 0 ? (
+                <div 
+                  onClick={() => setShowCreateGroupModal(true)}
+                  className="p-5 rounded-2xl bg-white dark:bg-[#1A2230] border border-dashed border-slate-200/80 dark:border-white/10 text-center space-y-2 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-[#20293A] transition-all group active:scale-[0.99]"
+                >
+                  <div className="w-10 h-10 mx-auto rounded-full bg-slate-100 dark:bg-[#252E3E] text-slate-400 dark:text-slate-500 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {t('noActiveGroupsYet', undefined, 'No active groups yet')}
+                  </p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 max-w-xs mx-auto">
+                    {t('createOrJoinGroupPrompt', undefined, 'Create a group or join via code to split bills together')}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {userGroups.map((g: any, idx: number) => {
+                    const GroupIcon = g.icon || (idx % 2 === 0 ? Utensils : Users);
 
-                  // Distinctive Colorful Badge Palette
-                  const GROUP_COLOR_PALETTES = [
-                    { bg: 'bg-orange-500/15 dark:bg-orange-500/25', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-500/30' },
-                    { bg: 'bg-indigo-500/15 dark:bg-indigo-500/25', text: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-500/30' },
-                    { bg: 'bg-pink-500/15 dark:bg-pink-500/25', text: 'text-pink-600 dark:text-pink-400', border: 'border-pink-500/30' },
-                    { bg: 'bg-sky-500/15 dark:bg-sky-500/25', text: 'text-sky-600 dark:text-sky-400', border: 'border-sky-500/30' },
-                    { bg: 'bg-purple-500/15 dark:bg-purple-500/25', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-500/30' },
-                    { bg: 'bg-amber-500/15 dark:bg-amber-500/25', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/30' },
-                    { bg: 'bg-teal-500/15 dark:bg-teal-500/25', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-500/30' },
-                    { bg: 'bg-rose-500/15 dark:bg-rose-500/25', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/30' },
-                  ];
-                  const colorPalette = GROUP_COLOR_PALETTES[idx % GROUP_COLOR_PALETTES.length];
+                    // Distinctive Colorful Badge Palette
+                    const GROUP_COLOR_PALETTES = [
+                      { bg: 'bg-orange-500/15 dark:bg-orange-500/25', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-500/30' },
+                      { bg: 'bg-indigo-500/15 dark:bg-indigo-500/25', text: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-500/30' },
+                      { bg: 'bg-pink-500/15 dark:bg-pink-500/25', text: 'text-pink-600 dark:text-pink-400', border: 'border-pink-500/30' },
+                      { bg: 'bg-sky-500/15 dark:bg-sky-500/25', text: 'text-sky-600 dark:text-sky-400', border: 'border-sky-500/30' },
+                      { bg: 'bg-purple-500/15 dark:bg-purple-500/25', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-500/30' },
+                      { bg: 'bg-amber-500/15 dark:bg-amber-500/25', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/30' },
+                      { bg: 'bg-teal-500/15 dark:bg-teal-500/25', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-500/30' },
+                      { bg: 'bg-rose-500/15 dark:bg-rose-500/25', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/30' },
+                    ];
+                    const colorPalette = GROUP_COLOR_PALETTES[idx % GROUP_COLOR_PALETTES.length];
 
-                  return (
-                    <div
-                      key={g.id}
-                      onClick={() => {
-                        if (isStarter) {
-                          setShowCreateGroupModal(true);
-                        } else {
-                          router.push(`/group/${g.id}`);
-                        }
-                      }}
-                      className="p-3.5 rounded-2xl bg-white dark:bg-[#1A2230] border border-slate-200/80 dark:border-white/5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-[#222C3D] transition-all cursor-pointer shadow-xs active:scale-[0.99] group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-11 h-11 rounded-full ${colorPalette.bg} flex items-center justify-center shrink-0 border ${colorPalette.border} group-hover:scale-110 group-active:scale-95 transition-all shadow-xs`}>
-                          <GroupIcon className={`w-5 h-5 ${colorPalette.text}`} />
+                    return (
+                      <div
+                        key={g.id}
+                        onClick={() => router.push(`/group/${g.id}`)}
+                        className="p-3.5 rounded-2xl bg-white dark:bg-[#1A2230] border border-slate-200/80 dark:border-white/5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-[#222C3D] transition-all cursor-pointer shadow-xs active:scale-[0.99] group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-11 h-11 rounded-full ${colorPalette.bg} flex items-center justify-center shrink-0 border ${colorPalette.border} group-hover:scale-110 group-active:scale-95 transition-all shadow-xs`}>
+                            <GroupIcon className={`w-5 h-5 ${colorPalette.text}`} />
+                          </div>
+
+                          <div className="min-w-0">
+                            <h4 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
+                              {g.name}{' '}
+                              <span className="font-semibold text-slate-400 text-xs">
+                                ({g.membersCount || 1} members)
+                              </span>
+                            </h4>
+                            {g.code && (
+                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
+                                #{g.code}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="min-w-0">
-                          <h4 className="font-extrabold text-sm text-slate-900 dark:text-white leading-tight truncate">
-                            {g.name}{' '}
-                            <span className="font-semibold text-slate-400 text-xs">
-                              ({g.membersCount || 4} members)
-                            </span>
-                          </h4>
-                          {g.code && !isStarter && (
-                            <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
-                              #{g.code}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isStarter) {
-                            setShowCreateGroupModal(true);
-                          } else {
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSelectedGroupForModal(g);
                             setGroupModalTab('options');
-                          }
-                        }}
-                        className="p-2 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
-                        title="Group options"
-                      >
-                        <span className="font-black text-sm tracking-widest leading-none">•••</span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                          }}
+                          className="p-2 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                          title="Group options"
+                        >
+                          <span className="font-black text-sm tracking-widest leading-none">•••</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1123,11 +1167,17 @@ export default function HomePage() {
             <div className="flex flex-col items-center justify-center space-y-2 py-2">
               <div className="relative group cursor-pointer" onClick={() => avatarFileInputRef.current?.click()}>
                 <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-white dark:bg-[#1A2333] border-4 border-slate-100 dark:border-[#222C3D] flex items-center justify-center overflow-hidden shadow-lg transition-transform duration-200 group-hover:scale-105 active:scale-95">
-                  <img
-                    src={profile.avatarUrl || DEFAULT_REAL_AVATAR}
-                    alt="Profile Avatar"
-                    className="w-full h-full rounded-full object-cover"
-                  />
+                  {profile.avatarUrl && !profile.avatarUrl.includes('unsplash') ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt="Profile Avatar"
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500">
+                      <User className="w-14 h-14 sm:w-16 sm:h-16" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Floating Rounded-Square Pencil Edit Badge (Bottom Right) */}
