@@ -196,12 +196,14 @@ export default function HomePage() {
     const userKey = rawName.toLowerCase();
     const userGroupsKey = `billsplit_user_groups_${userKey}`;
 
-    // Load local groups immediately (user-specific only)
+    // Load local groups immediately (user-specific with global fallback)
     const savedGroups = localStorage.getItem(userGroupsKey) 
-      || localStorage.getItem(`billsplit_user_groups_${rawName}`);
+      || localStorage.getItem(`billsplit_user_groups_${rawName}`)
+      || localStorage.getItem('billsplit_user_groups')
+      || getCookie('billsplit_user_groups');
     if (savedGroups) {
       try {
-        const parsed = JSON.parse(savedGroups);
+        const parsed = typeof savedGroups === 'string' ? JSON.parse(savedGroups) : savedGroups;
         if (Array.isArray(parsed)) {
           const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
           const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
@@ -239,8 +241,16 @@ export default function HomePage() {
           const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
           const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
           const filtered = groups.filter((g: any) => !deletedIds.includes(g.id));
-          setUserGroups(filtered);
-          localStorage.setItem(userGroupsKey, JSON.stringify(filtered));
+          setUserGroups((prev) => {
+            const serverIds = new Set(filtered.map((g) => g.id));
+            const localOnly = prev.filter((g) => !serverIds.has(g.id) && !deletedIds.includes(g.id));
+            const merged = [...filtered, ...localOnly];
+            localStorage.setItem(userGroupsKey, JSON.stringify(merged));
+            localStorage.setItem(`billsplit_user_groups_${rawName}`, JSON.stringify(merged));
+            localStorage.setItem('billsplit_user_groups', JSON.stringify(merged));
+            setCookie('billsplit_user_groups', merged);
+            return merged;
+          });
         }
       })
       .catch(() => {});
@@ -406,7 +416,7 @@ export default function HomePage() {
     }
 
     triggerHaptic('warning');
-    alert(t('codeNotFound', undefined, 'Code not found. Please check the 8-digit code.'));
+    alert(t('codeNotFound', undefined, 'Code not found. Please check the 4-digit code.'));
   };
 
   const handleScanComplete = (scanResult: any) => {
@@ -492,12 +502,17 @@ export default function HomePage() {
       const exists = prev.some((g) => g.id === newGroup.id);
       const updated = exists
         ? prev.map((g) => (g.id === newGroup.id ? { ...g, ...newGroup } : g))
-        : [{ id: newGroup.id, code: newGroup.code, name: newGroup.name }, ...prev];
-      const userKey = profile.displayName || '';
+        : [{ id: newGroup.id, code: newGroup.code, name: newGroup.name, membersCount: newGroup.membersCount || 1 }, ...prev];
+      const rawName = (profile.displayName || '').trim();
+      const userKey = rawName.toLowerCase();
+      if (rawName) {
+        localStorage.setItem(`billsplit_user_groups_${rawName}`, JSON.stringify(updated));
+      }
       if (userKey) {
         localStorage.setItem(`billsplit_user_groups_${userKey}`, JSON.stringify(updated));
       }
       localStorage.setItem('billsplit_user_groups', JSON.stringify(updated));
+      setCookie('billsplit_user_groups', updated);
       return updated;
     });
   };
@@ -593,7 +608,7 @@ export default function HomePage() {
   const activeTabIndex = activeTab === 'history' ? 0 : activeTab === 'sessions' ? 1 : 2;
 
   return (
-    <div className="flex flex-col min-h-screen p-4 transition-colors duration-300 dark:bg-[#0A0E17] dark:text-white pb-28">
+    <div className="flex flex-col min-h-full flex-1 p-4 pb-2 transition-colors duration-300 dark:bg-[#0A0E17] dark:text-white">
       {/* OCR Animated Progress Screen */}
       <OCRProgressOverlay isVisible={isUploading} />
 
@@ -1250,10 +1265,11 @@ export default function HomePage() {
                     </label>
                     <input
                       type="tel"
+                      dir={isRtl ? 'rtl' : 'ltr'}
                       value={phoneInput}
                       onChange={(e) => setPhoneInput(e.target.value)}
                       placeholder={t('phoneInputPlaceholder', undefined, '050-1234567')}
-                      className="w-full py-2.5 px-3.5 rounded-xl photo-input text-xs font-semibold font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
+                      className={`w-full py-2.5 px-3.5 rounded-xl photo-input text-xs font-semibold font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-900 dark:text-slate-100 ${isRtl ? 'text-right' : 'text-left'}`}
                     />
                   </div>
                 </div>
@@ -1281,7 +1297,6 @@ export default function HomePage() {
                     >
                       <Sun className="w-3.5 h-3.5" />
                       <span>{t('lightModeBtn', undefined, 'Light')}</span>
-                      {theme === 'light' && <Check className="w-3 h-3" />}
                     </button>
                     <button
                       type="button"
@@ -1293,31 +1308,28 @@ export default function HomePage() {
                       }`}
                     >
                       <Moon className="w-3.5 h-3.5" />
-                      <span>{t('darkModeBtn', undefined, 'Dark Mode')}</span>
-                      {theme === 'dark' && <Check className="w-3 h-3" />}
+                      <span>{t('darkModeBtn', undefined, 'Dark')}</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Preferred Currency Selector: USD on LEFT of NIS */}
                 <div>
                   <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1.5">
                     {t('preferredCurrencyLabel', undefined, 'Preferred Currency')}
                   </label>
-                  <div className="flex gap-2">
-                    {(['USD', 'NIS'] as const).map((curr) => (
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['NIS', 'USD', 'EUR'] as const).map((curr) => (
                       <button
                         key={curr}
                         type="button"
                         onClick={() => setCurrency(curr)}
-                        className={`flex-1 py-2 rounded-full border text-[11px] font-extrabold transition-all flex items-center justify-center gap-1.5 ${
+                        className={`py-2 rounded-full border text-[11px] font-black transition-all ${
                           currency === curr
                             ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                             : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
                       >
-                        <span>{curr} ({curr === 'USD' ? '$' : '₪'})</span>
-                        {currency === curr && <Check className="w-3 h-3" />}
+                        {curr === 'NIS' ? 'NIS ₪' : curr === 'USD' ? 'USD $' : 'EUR €'}
                       </button>
                     ))}
                   </div>
@@ -1325,36 +1337,35 @@ export default function HomePage() {
 
                 <div>
                   <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1.5">
-                    {t('languageSectionLabel', undefined, 'Language / שפה')}
+                    {t('appLanguageLabel', undefined, 'App Language')}
                   </label>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => setLanguage('en')}
-                      className={`flex-1 py-2 rounded-full border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                      className={`flex-1 py-2 rounded-full border text-[11px] font-black flex items-center justify-center gap-1.5 transition-all ${
                         language === 'en'
                           ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                           : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
-                      <span>{t('englishLangBtn', undefined, 'English')} 🇺🇸</span>
+                      <span>English 🇺🇸</span>
                       {language === 'en' && <Check className="w-3 h-3" />}
                     </button>
                     <button
                       type="button"
                       onClick={() => setLanguage('he')}
-                      className={`flex-1 py-2 rounded-full border text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                      className={`flex-1 py-2 rounded-full border text-[11px] font-black flex items-center justify-center gap-1.5 transition-all ${
                         language === 'he'
                           ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xs'
                           : 'bg-slate-100/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
-                      <span>{t('hebrewLangBtn', undefined, 'עברית (Hebrew)')} 🇮🇱</span>
+                      <span>עברית 🇮🇱</span>
                       {language === 'he' && <Check className="w-3 h-3" />}
                     </button>
                   </div>
                 </div>
-
               </div>
 
               <button
@@ -1365,7 +1376,7 @@ export default function HomePage() {
                 <span>{savedSuccess ? t('settingsSavedMsg', undefined, 'Settings Saved!') : t('saveSettingsBtn', undefined, 'Save Settings')}</span>
               </button>
 
-              {firebaseUser && (
+              {(firebaseUser || profile.displayName) && (
                 <button
                   type="button"
                   onClick={handleSignOutClick}
@@ -1381,7 +1392,7 @@ export default function HomePage() {
       </div>
 
       {/* Ultra-Smooth LTR & RTL Animated Sliding Modern Navbar */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 p-2.5 bg-white/85 dark:bg-[#0A0E17]/85 border-t border-slate-200/80 dark:border-slate-800/80 backdrop-blur-lg shadow-[0_-8px_24px_rgba(0,0,0,0.04)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
+      <nav className="sticky bottom-0 left-0 right-0 w-full z-40 p-2.5 bg-white/95 dark:bg-[#0A0E17]/95 border-t border-slate-200/80 dark:border-slate-800/80 backdrop-blur-xl shadow-[0_-8px_24px_rgba(0,0,0,0.04)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.45)] mt-auto">
         <div className="relative grid grid-cols-3 gap-2 p-1 bg-slate-100/80 dark:bg-[#121824]/90 rounded-full border border-slate-200/60 dark:border-[#222C3D]/80">
           
           {/* Animated Sliding Pill Indicator */}
@@ -1447,6 +1458,7 @@ export default function HomePage() {
       {/* Manual Bill Creation Modal */}
       <ManualBillModal
         isOpen={showManualModal}
+        isLoading={isUploading}
         onClose={() => {
           setShowManualModal(false);
           setPendingReceiptDraft(null);
@@ -1460,6 +1472,7 @@ export default function HomePage() {
       {/* Create Group Modal */}
       <CreateGroupModal
         isOpen={showCreateGroupModal}
+        isLoading={isUploading}
         onClose={() => setShowCreateGroupModal(false)}
         onCreateGroup={handleCreateGroup}
       />
@@ -1581,15 +1594,15 @@ export default function HomePage() {
               <input
                 type="text"
                 maxLength={8}
-                placeholder={t('enterUniversalCodePlaceholder', undefined, 'Enter 8-digit code')}
+                placeholder={t('enterUniversalCodePlaceholder', undefined, 'Enter 4-digit code')}
                 value={universalJoinCode}
                 onChange={(e) => setUniversalJoinCode(e.target.value.replace(/\D/g, ''))}
-                className="w-full py-2 px-3.5 rounded-xl photo-input text-center text-sm font-mono tracking-wider font-extrabold text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-sans placeholder:text-xs placeholder:tracking-normal"
+                className="w-full py-2.5 px-3.5 rounded-xl photo-input text-center text-sm font-mono tracking-widest font-extrabold text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-sans placeholder:text-xs placeholder:tracking-normal"
               />
 
               <button
                 type="submit"
-                disabled={!/^\d{8}$/.test(universalJoinCode)}
+                disabled={!/^\d{4,8}$/.test(universalJoinCode)}
                 className="w-full py-3 px-4 photo-btn-indigo text-xs flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
                 <span>{t('joinSessionBtn', undefined, 'Join')}</span>

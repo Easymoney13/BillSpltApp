@@ -12,7 +12,7 @@ const i18nDictionary: Record<string, Record<string, string>> =
 export const DEFAULT_REAL_AVATAR = '';
 
 type Language = 'en' | 'he';
-type Currency = 'USD' | 'NIS';
+type Currency = 'USD' | 'NIS' | 'EUR';
 type Theme = 'dark' | 'light';
 
 interface UserProfile {
@@ -216,7 +216,18 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               });
             }
           } else {
-            setProfile(savedLocalProfile || { displayName: '', avatarColor: '#10B981' });
+            const rawProfile = typeof window !== 'undefined' ? localStorage.getItem('billsplit_local_profile') : null;
+            const parsedProfile = rawProfile ? JSON.parse(rawProfile) : null;
+            if (parsedProfile?.displayName) {
+              setProfile({
+                displayName: String(parsedProfile.displayName),
+                avatarColor: String(parsedProfile.avatarColor || '#10B981'),
+                avatarUrl: typeof parsedProfile.avatarUrl === 'string' ? parsedProfile.avatarUrl : undefined,
+                phoneNumber: typeof parsedProfile.phoneNumber === 'string' ? parsedProfile.phoneNumber : undefined,
+              });
+            } else {
+              setProfile({ displayName: '', avatarColor: '#10B981' });
+            }
           }
           setAuthLoading(false);
           setIsInitialized(true);
@@ -326,11 +337,26 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const logout = async () => {
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('billsplit_local_profile');
+        localStorage.removeItem('billsplit_phone');
+        localStorage.removeItem('billsplit_active_session');
+      }
+      setProfile({ displayName: '', avatarColor: '#10B981', avatarUrl: undefined, phoneNumber: undefined });
+      setGuestName('');
       const { auth } = await import('../../lib/firebase');
       const { signOut } = await import('firebase/auth');
       await signOut(auth);
+      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+        window.location.href = '/';
+      }
     } catch (e) {
       console.error('Sign-Out failed:', e);
+      setProfile({ displayName: '', avatarColor: '#10B981', avatarUrl: undefined, phoneNumber: undefined });
+      setGuestName('');
+      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+        window.location.href = '/';
+      }
     }
   };
 

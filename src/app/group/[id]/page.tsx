@@ -37,7 +37,6 @@ import { createReceiptDraft, receiptConfirmationPayload, receiptScanUserMessage 
 import { getCookie, setCookie } from '../../../../lib/cookies';
 import { formatCurrency } from '../../../../lib/i18n';
 import { isValidIsraeliPhone, triggerBitPayment } from '../../../../lib/bitDeepLink';
-
 import { triggerHaptic } from '../../../../lib/haptics';
 import { clearRoomCredentials, getRoomMemberId, getRoomToken, roomHeaders, saveRoomCredentials } from '../../../../lib/roomTokens';
 
@@ -67,11 +66,44 @@ export default function GroupWorkspacePage() {
   const [pendingReceiptDraft, setPendingReceiptDraft] = useState<any>(null);
   const [pendingScanId, setPendingScanId] = useState('');
   const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
-  const [swipedBillId, setSwipedBillId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
+
+  const persistGroupToLocal = (grp: any) => {
+    if (!grp || !grp.id) return;
+    try {
+      const localDeleted = localStorage.getItem('billsplit_deleted_group_ids');
+      const deletedIds = localDeleted ? JSON.parse(localDeleted) : [];
+      if (deletedIds.includes(grp.id)) return;
+
+      const cookieGroups = getCookie('billsplit_user_groups');
+      const localGroups = localStorage.getItem('billsplit_user_groups');
+      const rawGroups = cookieGroups || (localGroups ? JSON.parse(localGroups) : []);
+      const list = Array.isArray(rawGroups) ? rawGroups : [];
+      const exists = list.some((g: any) => g.id === grp.id);
+      const item = {
+        id: grp.id,
+        code: grp.code,
+        name: grp.name,
+        currency: grp.currency,
+        membersCount: Array.isArray(grp.members) ? grp.members.length : 1,
+      };
+      const updated = exists ? list.map((g: any) => (g.id === grp.id ? { ...g, ...item } : g)) : [item, ...list];
+      setCookie('billsplit_user_groups', updated);
+      localStorage.setItem('billsplit_user_groups', JSON.stringify(updated));
+
+      const rawName = (profile?.displayName || '').trim();
+      const userKey = rawName.toLowerCase();
+      if (rawName) {
+        localStorage.setItem(`billsplit_user_groups_${rawName}`, JSON.stringify(updated));
+      }
+      if (userKey) {
+        localStorage.setItem(`billsplit_user_groups_${userKey}`, JSON.stringify(updated));
+      }
+    } catch (e) {}
+  };
 
   const handleScanCamera = () => {
     const isMobile = typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -106,6 +138,7 @@ export default function GroupWorkspacePage() {
           if (!disposed) {
             setCurrentMemberId(existingMember.id);
             setGroup(initialData.group);
+            persistGroupToLocal(initialData.group);
             setFetchError(null);
             connectWebSocket(resolvedId, existingToken);
             interval = setInterval(() => fetchGroupData(resolvedId), 15_000);
@@ -132,6 +165,7 @@ export default function GroupWorkspacePage() {
         if (!disposed) {
           setCurrentMemberId(joined.memberId);
           setGroup(joined.group);
+          persistGroupToLocal(joined.group);
           setFetchError(null);
           connectWebSocket(resolvedId, joined.accessToken);
           interval = setInterval(() => fetchGroupData(resolvedId), 15_000);
@@ -165,6 +199,7 @@ export default function GroupWorkspacePage() {
         const data = await res.json();
         if (data.group) {
           setGroup(data.group);
+          persistGroupToLocal(data.group);
           setFetchError(null);
           // Normalize a shared invite code to the durable group id.
           if (data.group.id && data.group.id !== id) {
@@ -201,6 +236,7 @@ export default function GroupWorkspacePage() {
           const data = JSON.parse(event.data);
           if (data.type === 'GROUP_UPDATE' && data.group) {
             setGroup(data.group);
+            persistGroupToLocal(data.group);
           } else if (data.type === 'GROUP_DELETED') {
             clearRoomCredentials('group', id);
             router.push('/');
@@ -244,6 +280,7 @@ export default function GroupWorkspacePage() {
       if (!res.ok) throw new Error(data.error || 'Failed to save bill to group');
       if (data.group) {
         setGroup(data.group);
+        persistGroupToLocal(data.group);
         setShowCreateBillModal(false);
         setEditingBill(null);
         setPendingReceiptDraft(null);
@@ -264,40 +301,51 @@ export default function GroupWorkspacePage() {
     }
   };
 
-  const handleDeleteBill = async (billId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this bill from the group?')) return false;
-
+  const handleDeleteBill = async (billId: string) => {
+    if (!group) return;
+    const isPaymentLocked = group.bills?.find((b: any) => b.id === billId)?.status === 'settled';
+    if (isPaymentLocked) {
+      alert(t('cannotDeleteSettledBill', undefined, 'This bill is settled or has completed payments. It cannot be deleted.'));
+      return;
+    }
+    const resolvedId = group.id || groupId;
     try {
-      const resolvedId = group?.id || groupId;
       const res = await fetch(`/api/groups/bill/${resolvedId}/${billId}`, {
         method: 'DELETE',
-        headers: roomHeaders('group', resolvedId, false),
+        headers: roomHeaders('group', resolvedId),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete bill');
       if (data.group) {
         setGroup(data.group);
+        persistGroupToLocal(data.group);
       }
-      if (!res.ok) throw new Error(data.error || 'Could not delete bill');
-      return true;
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : 'Could not delete bill');
-      return false;
+      alert('Failed to delete bill');
     }
   };
 
-  const sendGroupBillAction = async (action: string, payload: Record<string, unknown>) => {
+  const sendGroupBillAction = async (type: string, payload: any) => {
     if (!group) return;
     try {
       const res = await fetch('/api/groups/bill/action', {
         method: 'POST',
         headers: roomHeaders('group', group.id),
-        body: JSON.stringify({ groupId: group.id, action, payload, actionId: createClientActionId() }),
+        body: JSON.stringify({
+          groupId: group.id,
+          type,
+          payload,
+          actionId: createClientActionId(),
+          memberId: currentMemberId,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not update bill');
-      if (data.group) setGroup(data.group);
+      if (!res.ok) throw new Error(data.error || 'Failed to perform bill action');
+      if (data.group) {
+        setGroup(data.group);
+        persistGroupToLocal(data.group);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not update bill');
     }
@@ -334,17 +382,6 @@ export default function GroupWorkspacePage() {
     }
   };
 
-  const handleCopyInviteLink = () => {
-    if (!group) return;
-    const url = `${window.location.origin}/group/${group.code || group.id}`;
-    try {
-      navigator.clipboard.writeText(url);
-      setCopiedInvite(true);
-      setTimeout(() => setCopiedInvite(false), 2500);
-      triggerHaptic('light');
-    } catch (e) {}
-  };
-
   const validMembers = useMemo(() => {
     const raw = Array.isArray(group?.members) ? group.members.filter((member: any) => member && member.active !== false) : [];
     const seen = new Set();
@@ -379,10 +416,17 @@ export default function GroupWorkspacePage() {
   const unassignedAmount = Number(group?.unassignedAmount || 0);
   const isGroupHost = Boolean(validMembers.find((member: any) => member.id === currentMemberId)?.isHost);
 
+  // Stable memoized modal data
+  const initialModalData = useMemo(() => {
+    if (editingBill) return editingBill;
+    if (pendingReceiptDraft) return pendingReceiptDraft;
+    return { currency: group?.currency || 'NIS' };
+  }, [editingBill, pendingReceiptDraft, group?.currency]);
+
   if (!group) {
     if (fetchError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-slate-50 dark:bg-[#0A0E17] text-slate-900 dark:text-white text-center space-y-4">
+        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-white dark:bg-[#0A0E17] text-slate-900 dark:text-white text-center space-y-4">
           <div className="p-4 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400">
             <Users className="w-8 h-8" />
           </div>
@@ -392,7 +436,7 @@ export default function GroupWorkspacePage() {
           </p>
           <button
             onClick={() => router.push('/')}
-            className="py-2.5 px-5 photo-btn-dark text-xs font-bold flex items-center justify-center gap-2 shadow-md active:scale-95"
+            className="py-2.5 px-5 rounded-full bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-xs font-bold flex items-center justify-center gap-2 shadow-md active:scale-95"
           >
             <span>{t('backToHomeBtn', undefined, 'Back to Home')}</span>
           </button>
@@ -401,15 +445,15 @@ export default function GroupWorkspacePage() {
     }
 
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-5 bg-slate-50 dark:bg-[#0A0E17] text-slate-900 dark:text-white">
-        <RefreshCw className="w-8 h-8 animate-spin text-slate-900 dark:text-white mb-2" />
-        <p className="text-xs font-bold">Loading Group Workspace...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen p-5 bg-white dark:bg-[#0A0E17] text-slate-900 dark:text-white">
+        <RefreshCw className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
+        <p className="text-xs font-bold text-slate-500">Loading Group Workspace...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen p-5 text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-[#0A0E17] space-y-5 transition-colors duration-300 pb-28">
+    <div className="flex flex-col min-h-screen p-5 text-slate-900 dark:text-slate-100 bg-[#F8FAFC] dark:bg-[#0A0E17] space-y-5 transition-colors duration-300 pb-28" dir={isRtl ? 'rtl' : 'ltr'}>
       <OCRProgressOverlay isVisible={isUploading} />
 
       <input
@@ -445,6 +489,7 @@ export default function GroupWorkspacePage() {
       {showCreateBillModal && (
         <ManualBillModal
           isOpen={showCreateBillModal}
+          isLoading={isUploading}
           onClose={() => {
             setShowCreateBillModal(false);
             setEditingBill(null);
@@ -466,15 +511,15 @@ export default function GroupWorkspacePage() {
               confirmedByUser: Boolean(pendingScanId),
             });
           }}
-          initialData={editingBill || pendingReceiptDraft || { currency: group.currency || 'NIS' }}
+          initialData={initialModalData}
         />
       )}
 
       {/* Start Split Options Popup Modal */}
       {showStartSplitModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-slate-950/60 backdrop-blur-xs animate-fadeIn" onClick={() => setShowStartSplitModal(false)}>
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-slate-950/70 backdrop-blur-xs animate-fadeIn" onClick={() => setShowStartSplitModal(false)}>
           <div 
-            className="w-full max-w-md mx-auto rounded-t-[32px] p-6 bg-white dark:bg-[#121824] text-slate-900 dark:text-white space-y-4 shadow-2xl animate-slideUp"
+            className="w-full max-w-md mx-auto rounded-t-[32px] p-6 bg-white dark:bg-[#0E131F] text-slate-900 dark:text-white space-y-4 shadow-2xl animate-slideUp border-t border-slate-200 dark:border-slate-800"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -499,12 +544,10 @@ export default function GroupWorkspacePage() {
                   setShowStartSplitModal(false);
                   handleScanCamera();
                 }}
-                className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
+                className="w-full p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-                  </svg>
+                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/40">
+                  <Camera className="w-5 h-5" />
                 </div>
                 <div>
                   <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-snug">{t('scanCameraOption', undefined, 'Scan Receipt Camera')}</h4>
@@ -518,9 +561,9 @@ export default function GroupWorkspacePage() {
                   setShowStartSplitModal(false);
                   fileInputRef.current?.click();
                 }}
-                className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
+                className="w-full p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white">
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                   <Upload className="w-5 h-5" />
                 </div>
                 <div>
@@ -538,12 +581,10 @@ export default function GroupWorkspacePage() {
                   setEditingBill(null);
                   setShowCreateBillModal(true);
                 }}
-                className="w-full p-3 rounded-2xl border border-slate-150 dark:border-[#222C3D] hover:bg-slate-50 dark:hover:bg-[#1A2333] transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
+                className="w-full p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 transition-all flex items-center gap-3.5 text-left active:scale-[0.98]"
               >
-                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
-                  </svg>
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                  <FilePlus className="w-5 h-5" />
                 </div>
                 <div>
                   <h4 className="font-extrabold text-xs text-slate-900 dark:text-white leading-snug">{t('manualSplitOption', undefined, 'Create Bill Manually')}</h4>
@@ -559,16 +600,16 @@ export default function GroupWorkspacePage() {
       <header className="flex items-center justify-between py-2 border-b border-slate-200/80 dark:border-slate-800">
         <button
           onClick={() => router.push('/')}
-          className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-sm active:scale-95"
+          className="w-10 h-10 rounded-full bg-white dark:bg-[#121824] border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors shadow-xs active:scale-95"
         >
           <ChevronLeft className={`w-5 h-5 ${isRtl ? 'rotate-180' : ''}`} />
         </button>
 
         <div className="text-center">
-          <h1 className="font-extrabold text-base text-slate-900 dark:text-white">{group.name}</h1>
+          <h1 className="font-extrabold text-base text-slate-900 dark:text-white tracking-tight">{group.name}</h1>
           <button
             onClick={() => setShowQrModal(true)}
-            className="inline-flex items-center gap-1 text-xs font-mono text-slate-900 dark:text-white font-bold hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-mono text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
             title="Tap to Share Group"
           >
             <QrCode className="w-3 h-3" />
@@ -579,7 +620,7 @@ export default function GroupWorkspacePage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="w-9 h-9 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 transition-colors shadow-sm"
+            className="w-9 h-9 rounded-full bg-white dark:bg-[#121824] border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-xs"
             title="Toggle Theme"
           >
             {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
@@ -587,7 +628,7 @@ export default function GroupWorkspacePage() {
 
           <button
             onClick={() => setShowQrModal(true)}
-            className="py-1.5 px-3 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white flex items-center gap-1.5 transition-all shadow-sm font-bold text-xs active:scale-95"
+            className="py-1.5 px-3 rounded-full bg-slate-950 hover:bg-slate-800 dark:bg-white dark:text-slate-950 text-white flex items-center gap-1.5 transition-all shadow-xs font-bold text-xs active:scale-95"
             title="Share Group"
           >
             <Share2 className="w-3.5 h-3.5" />
@@ -644,7 +685,7 @@ export default function GroupWorkspacePage() {
                 }
               }
             }}
-            className="w-9 h-9 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 flex items-center justify-center transition-colors shadow-sm active:scale-95"
+            className="w-9 h-9 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 flex items-center justify-center transition-colors shadow-xs active:scale-95"
             title={isGroupHost ? 'Delete Group' : 'Leave Group'}
           >
             <LogOut className="w-4 h-4" />
@@ -653,19 +694,21 @@ export default function GroupWorkspacePage() {
       </header>
 
       {/* Action Header Card — Add Bill to Group */}
-      <div className="photo-card-indigo p-4 space-y-3 rounded-2xl">
+      <div className="relative overflow-hidden rounded-[24px] p-5 bg-gradient-to-br from-[#1E293B] via-[#0F172A] to-[#0A0E17] text-white border border-slate-800 shadow-lg space-y-4">
         <div className="flex items-center justify-between">
-          <span className="px-2 py-0.5 rounded-full bg-black/30 text-white text-[9px] font-extrabold uppercase tracking-wider backdrop-blur-md">
+          <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-extrabold uppercase tracking-wider">
             {t('tripExpenseTracker', undefined, 'Group Expense Tracker')}
           </span>
-          <Sparkles className="w-3.5 h-3.5 text-white" />
+          <Sparkles className="w-4 h-4 text-indigo-400" />
         </div>
 
         <div>
-          <h2 className="text-base font-black text-white">{t('addBillsToGroup', { groupName: group.name }, `Add Bills to ${group.name}`)}</h2>
+          <h2 className="text-lg font-black text-white tracking-tight leading-snug">
+            {t('addBillsToGroup', { groupName: group.name }, `Add Bills to ${group.name}`)}
+          </h2>
         </div>
 
-        <div className="pt-0.5">
+        <div className="pt-1">
           <input
             type="file"
             ref={cameraInputRef}
@@ -680,31 +723,33 @@ export default function GroupWorkspacePage() {
               setShowStartSplitModal(true);
               triggerHaptic('medium');
             }}
-            className="w-full py-3.5 px-6 rounded-2xl bg-white text-slate-900 hover:bg-slate-50 font-black text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-6 rounded-full bg-white hover:bg-slate-100 text-slate-950 font-black text-xs shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-4 h-4 text-slate-900 animate-pulse" />
+            <Sparkles className="w-4 h-4 text-indigo-600" />
             <span>{t('startSplitBtn', undefined, 'Start Split')}</span>
           </button>
         </div>
       </div>
 
       {/* SECTION 1: DEBT MINIMIZATION SUMMARY */}
-      <div className="photo-card p-3 bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-[#222C3D] shadow-sm space-y-2">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
-          <div className="flex items-center gap-1.5">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-900 dark:text-white">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-            </svg>
-            <h3 className="font-bold text-xs text-slate-900 dark:text-white">{t('debtMinimizationTitle', undefined, 'Debt Minimization Settlement')}</h3>
+      <div className="rounded-[24px] p-4 bg-white dark:bg-[#0E131F] border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+              <Users className="w-4 h-4" />
+            </div>
+            <h3 className="font-extrabold text-xs text-slate-900 dark:text-white">
+              {t('debtMinimizationTitle', undefined, 'Debt Minimization Settlement')}
+            </h3>
           </div>
         </div>
 
         {/* Member Avatars Live Net Balance Badges */}
-        <div className="space-y-1">
-          <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">
+        <div className="space-y-1.5">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
             {t('memberNetBalances', undefined, 'MEMBER NET BALANCES')}
           </span>
-          <div className="grid grid-cols-2 gap-2.5 pt-1">
+          <div className="grid grid-cols-2 gap-2.5 pt-0.5">
             {balances.map((b: any) => {
               const isCreditor = b.netBalance > 0.01;
               const isDebtor = b.netBalance < -0.01;
@@ -712,24 +757,22 @@ export default function GroupWorkspacePage() {
               return (
                 <div
                   key={b.memberId}
-                  className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs transition-all duration-200"
+                  className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-50 dark:bg-[#131B2A] border border-slate-200/80 dark:border-slate-800/80 shadow-xs transition-all duration-200"
                 >
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700 shrink-0 shadow-xs">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                    </svg>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center bg-white dark:bg-[#1B263B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shrink-0 font-bold text-xs shadow-xs">
+                    {(b.name || 'M').substring(0, 2).toUpperCase()}
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-black text-slate-800 dark:text-white leading-tight truncate">
+                    <span className="text-xs font-black text-slate-900 dark:text-white leading-tight truncate">
                       {b.name}
                     </span>
                     <span
                       className={`text-[10px] font-extrabold font-mono mt-1 px-1.5 py-0.5 rounded-md leading-none border w-max ${
                         isCreditor
-                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                           : isDebtor
                           ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-transparent'
+                          : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-transparent'
                       }`}
                     >
                       {isCreditor ? `+${formatCurrency(b.netBalance, group.currency || 'NIS')}` : isDebtor ? `-${formatCurrency(Math.abs(b.netBalance), group.currency || 'NIS')}` : formatCurrency(0, group.currency || 'NIS')}
@@ -743,11 +786,16 @@ export default function GroupWorkspacePage() {
 
         {/* Minimized Transactions List */}
         {minimizedTransactions.length === 0 ? (
-          <p className="text-xs text-slate-400 font-medium text-center py-1.5">
-            {unassignedAmount > 0
-              ? t('assignItemsToCalculate', undefined, 'Claim the remaining items to complete the settlement calculation.')
-              : t('allExpensesSettled', undefined, 'All group expenses are settled! No debts owed. 🎉')}
-          </p>
+          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400 font-medium text-center py-2">
+            {unassignedAmount > 0 ? (
+              <span>{t('assignItemsToCalculate', undefined, 'Claim the remaining items to complete the settlement calculation.')}</span>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>{t('allExpensesSettled', undefined, 'All group expenses are settled! No debts owed.')}</span>
+              </>
+            )}
+          </div>
         ) : (
           <div className="space-y-1.5 pt-0.5">
             {minimizedTransactions.map((tx: any, idx: number) => {
@@ -784,7 +832,7 @@ export default function GroupWorkspacePage() {
               return (
                 <div
                   key={idx}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#131B2A] border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between"
                 >
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5 text-xs font-bold">
@@ -802,13 +850,13 @@ export default function GroupWorkspacePage() {
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={handleOpenBit}
-                        className="py-1 px-2.5 rounded-lg bg-gradient-to-r from-[#7026FF] to-[#00C2F3] text-white font-extrabold text-[10px] shadow-xs active:scale-95 transition-transform"
+                        className="py-1 px-2.5 rounded-lg bg-[#7026FF] hover:bg-[#5C1FD4] text-white font-extrabold text-[10px] shadow-xs active:scale-95 transition-transform"
                       >
                         Bit
                       </button>
                       <button
                         onClick={handleOpenPaybox}
-                        className="py-1 px-2.5 rounded-lg bg-gradient-to-r from-[#005082] to-[#00C5B4] text-white font-extrabold text-[10px] shadow-xs active:scale-95 transition-transform"
+                        className="py-1 px-2.5 rounded-lg bg-[#005082] hover:bg-[#003E66] text-white font-extrabold text-[10px] shadow-xs active:scale-95 transition-transform"
                       >
                         Paybox
                       </button>
@@ -824,16 +872,16 @@ export default function GroupWorkspacePage() {
       {/* SECTION 2: PAST BILLS TIMELINE & INTERACTIVE CLAIMING */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-            <FileText className="w-4 h-4" />
+          <h2 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+            <FileText className="w-4 h-4 text-indigo-500" />
             <span>{t('groupPastBills', { n: validBills.length }, `Group Past Bills (${validBills.length})`)}</span>
           </h2>
           <span className="text-[11px] text-slate-400 font-medium">{t('tapPastBillNotice', undefined, 'Tap past bill to claim items')}</span>
         </div>
 
         {validBills.length === 0 ? (
-          <div className="photo-card p-6 bg-white dark:bg-[#121824] text-center text-slate-400 space-y-2">
-            <FileText className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
+          <div className="rounded-[24px] p-6 bg-white dark:bg-[#0E131F] border border-slate-200/80 dark:border-slate-800 text-center text-slate-400 space-y-2 shadow-xs">
+            <FileText className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {t('noBillsYetGroup', undefined, 'No bills added to this group yet. Use the buttons above to scan or create a bill!')}
             </p>
@@ -869,27 +917,23 @@ export default function GroupWorkspacePage() {
                 <SwipeableCard
                   key={bill.id}
                   onDelete={() => isPaymentLocked ? false : handleDeleteBill(bill.id)}
-                  className="shadow-sm"
+                  className="shadow-xs"
                 >
                   <div
-                    className="photo-card bg-white dark:bg-[#121824] border border-slate-200/80 dark:border-[#222C3D] overflow-hidden transition-all shadow-xs"
+                    className="rounded-[20px] bg-white dark:bg-[#0E131F] border border-slate-200/80 dark:border-slate-800 overflow-hidden transition-all shadow-xs"
                   >
                     <div
                       onClick={() => setExpandedBillId(isExpanded ? null : bill.id)}
-                      className="p-3.5 space-y-2.5 cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
+                      className="p-4 space-y-3 cursor-pointer hover:bg-slate-50/50 dark:hover:bg-[#131B2A]/50 transition-colors"
                     >
                       {/* Row 1: Title & Total Amount */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-0.5 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 min-w-0">
                             {isPaymentLocked ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-slate-900 dark:text-white shrink-0" aria-label="Settled">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                              </svg>
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                             ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-amber-500 shrink-0" aria-label="Active">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                              </svg>
+                              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
                             )}
                             <h4 className="font-extrabold text-slate-900 dark:text-white text-xs leading-tight truncate">
                               {bill.title}
@@ -917,21 +961,21 @@ export default function GroupWorkspacePage() {
                             saveRoomCredentials('session', targetSessionId, currentMemberId, getRoomToken('group', group.id));
                             router.push(`/session/${targetSessionId}?groupId=${group.id}`);
                           }}
-                          className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white font-extrabold text-xs shadow-md shadow-slate-900/10 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                          className="w-full py-2.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-900 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 text-white font-extrabold text-xs shadow-xs transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                           title="Open Live Claiming Session"
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-white dark:text-slate-900 animate-pulse" />
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400 dark:text-indigo-600" />
                           <span>{t('liveSessionBtn', undefined, 'Live Session')}</span>
-                          <ArrowRight className={`w-3.5 h-3.5 text-white/90 dark:text-slate-900 ${isRtl ? 'rotate-180' : ''}`} />
+                          <ArrowRight className={`w-3.5 h-3.5 ${isRtl ? 'rotate-180' : ''}`} />
                         </button>
                       </div>
                     </div>
 
                     {/* Expanded Interactive Item Claiming & Payer Selector */}
                     {isExpanded && (
-                      <div className="p-3 bg-slate-50/80 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 space-y-2.5 text-xs">
+                      <div className="p-3 bg-slate-50/80 dark:bg-[#131B2A]/60 border-t border-slate-100 dark:border-slate-800 space-y-2.5 text-xs">
                         {/* Payer Selector & Edit Action */}
-                        <div className="flex items-center justify-between bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                        <div className="flex items-center justify-between bg-white dark:bg-[#1A2333] p-2 rounded-xl border border-slate-200/80 dark:border-slate-700">
                           <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t('whoPaidUpfront', undefined, 'Who paid this bill upfront?')}</span>
                           <div className="flex items-center gap-1.5">
                             <select
@@ -947,20 +991,22 @@ export default function GroupWorkspacePage() {
                               ))}
                             </select>
 
-                            {canManageBill && <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPendingReceiptDraft(null);
-                                setPendingScanId('');
-                                setEditingBill(bill);
-                                setShowCreateBillModal(true);
-                              }}
-                              className="p-1 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                              title="Edit Bill Details"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>}
+                            {canManageBill && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPendingReceiptDraft(null);
+                                  setPendingScanId('');
+                                  setEditingBill(bill);
+                                  setShowCreateBillModal(true);
+                                }}
+                                className="p-1 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                title="Edit Bill Details"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -968,12 +1014,14 @@ export default function GroupWorkspacePage() {
                           <span className="font-extrabold uppercase text-[10px] text-slate-400 tracking-wider">
                             {t('tapMemberChipNotice', undefined, 'Tap member chip on an item to claim item share:')}
                           </span>
-                          {canManageBill && <button
-                            onClick={handleSplitAllItems}
-                            className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors"
-                          >
-                            {t('splitAllEqually', undefined, 'Split All Equally')}
-                          </button>}
+                          {canManageBill && (
+                            <button
+                              onClick={handleSplitAllItems}
+                              className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors"
+                            >
+                              {t('splitAllEqually', undefined, 'Split All Equally')}
+                            </button>
+                          )}
                         </div>
 
                         {/* Items List with Interactive Member Claim Chips */}
@@ -984,13 +1032,12 @@ export default function GroupWorkspacePage() {
                             return (
                               <div
                                 key={item.id}
-                                className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-2"
+                                className="p-2.5 rounded-xl bg-white dark:bg-[#1A2333] border border-slate-200/80 dark:border-slate-700 space-y-2"
                               >
                                 <div className="flex justify-between items-center text-slate-900 dark:text-white">
                                   <span className="font-bold">{item.name}</span>
                                   <span className="font-mono font-extrabold">{formatCurrency(item.price || 0, group.currency || 'NIS')}</span>
                                 </div>
-
 
                                 {/* Member Claim Chips */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -1003,17 +1050,14 @@ export default function GroupWorkspacePage() {
                                         key={m.id}
                                         onClick={() => handleToggleItemClaim(item.id, m.id, !isClaimed)}
                                         disabled={!isMe || isPaymentLocked}
-                                        className={`px-2 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 transition-all ${
+                                        className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 transition-all ${
                                           isClaimed
-                                            ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-sm'
+                                            ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
                                             : 'bg-slate-100 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-700 hover:bg-slate-200'
                                         } ${!isMe ? 'cursor-default opacity-70' : ''}`}
                                       >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                                        </svg>
                                         <span>{m.name}</span>
-                                        {isClaimed && <CheckCircle2 className="w-3 h-3 text-slate-900 dark:text-white" />}
+                                        {isClaimed && <CheckCircle2 className="w-3 h-3 text-emerald-400 dark:text-emerald-600" />}
                                       </button>
                                     );
                                   })}

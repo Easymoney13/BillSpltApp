@@ -14,12 +14,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-slate-100/80 text-slate-900 min-h-screen flex items-center justify-center p-0 md:p-6 antialiased">
+      <body className="bg-slate-900/95 dark:bg-[#05070D] text-slate-900 min-h-screen flex items-center justify-center p-0 md:p-6 antialiased">
         <LanguageProvider>
           {/* Main container: Centered phone shell look on desktop, full screen on mobile */}
-          <div className="w-full max-w-md min-h-screen md:min-h-[850px] md:max-h-[920px] bg-slate-50 md:rounded-[40px] md:shadow-[0_24px_60px_-15px_rgba(0,0,0,0.12)] md:border-8 md:border-slate-900/90 relative overflow-hidden flex flex-col">
+          <div className="w-full max-w-md min-h-screen md:min-h-[844px] md:max-h-[92vh] bg-white dark:bg-[#0A0E17] md:rounded-[44px] md:shadow-[0_25px_70px_rgba(0,0,0,0.5)] md:border-[10px] md:border-slate-800 relative overflow-hidden flex flex-col">
             {/* Main view container */}
-            <main className="flex-1 w-full relative z-10 flex flex-col overflow-y-auto pb-24">
+            <main className="flex-1 w-full relative z-10 flex flex-col overflow-y-auto">
               {children}
             </main>
           </div>

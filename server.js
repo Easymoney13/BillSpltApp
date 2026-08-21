@@ -1,11 +1,32 @@
-process.on('uncaughtException', (err) => {
-  console.error('Fatal uncaught exception:', err);
-  process.exit(1);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('Fatal unhandled rejection:', reason);
-  process.exit(1);
-});
+const fs = require('fs');
+const path = require('path');
+
+// Automatically load .env and .env.local into process.env if present
+function loadEnvFiles() {
+  const candidates = [
+    path.resolve(process.cwd(), '.env.local'),
+    path.resolve(process.cwd(), '.env'),
+  ];
+  for (const filePath of candidates) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+            const idx = trimmed.indexOf('=');
+            const key = trimmed.slice(0, idx).trim();
+            const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+            if (key && process.env[key] === undefined) {
+              process.env[key] = val;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }
+}
+loadEnvFiles();
 
 const express = require('express');
 const crypto = require('crypto');
@@ -53,8 +74,6 @@ const { processGroupBillAction } = require('./lib/groupActions');
 const { trackAnalyticsEvent } = require('./lib/analytics');
 
 const admin = require('firebase-admin');
-const fs = require('fs');
-const path = require('path');
 
 if (!process.env.GEMINI_API_KEY) {
   console.warn('⚠️ GEMINI_API_KEY is not configured. Server-side receipt OCR will reject image scans instead of returning unverified text.');
@@ -1240,6 +1259,10 @@ app.prepare().then(() => {
       };
 
       await db.saveGroup(newGroup);
+
+      if (req.user?.uid && typeof db.addGroupToUser === 'function') {
+        await db.addGroupToUser(req.user.uid, newGroup.id);
+      }
 
       return res.json({
         success: true,

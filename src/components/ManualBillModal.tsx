@@ -1,15 +1,23 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { X, Plus, Trash2, FileText, ArrowRight, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import {
+  ChevronLeft,
+  Info,
+  Plus,
+  Trash2,
+  Loader2,
+  Check,
+  CheckCircle2,
+} from 'lucide-react';
 import { useLanguage } from './LanguageContext';
-import { reconcileReceipt } from '../../lib/receiptMath';
 
 interface ManualBillModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLaunchSession: (billData: { storeName: string; date?: string; currency: string; items: any[] }) => void;
-  initialData?: { title?: string; storeName?: string; currency?: string; items?: any[]; [key: string]: any } | null;
+  onLaunchSession: (billData: { storeName: string; date?: string; currency: string; items: any[]; category?: string }) => Promise<void> | void;
+  initialData?: { title?: string; storeName?: string; currency?: string; items?: any[]; date?: string; [key: string]: any } | null;
+  isLoading?: boolean;
 }
 
 interface DraftItem {
@@ -23,80 +31,94 @@ interface DraftItem {
   lineTotal?: number;
 }
 
-function receiptDraftSignature(storeName: string, currency: string, items: DraftItem[]) {
-  return JSON.stringify({
-    storeName: storeName.trim(),
-    currency,
-    items: items.map((item) => ({ name: item.name.trim(), price: Number(item.price) || 0 })),
-  });
-}
-
 export const ManualBillModal: React.FC<ManualBillModalProps> = ({
   isOpen,
   onClose,
   onLaunchSession,
   initialData = null,
+  isLoading = false,
 }) => {
   const { t, currency, isRtl, formatPrice } = useLanguage();
 
+  const categories = [
+    { id: 'Food', label: t('categoryFood', undefined, isRtl ? 'אוכל ומסעדות 🍕' : 'Food & Dining 🍕') },
+    { id: 'Coffee', label: t('categoryCoffee', undefined, isRtl ? 'קפה ומשקאות ☕' : 'Coffee & Drinks ☕') },
+    { id: 'Groceries', label: t('categoryGroceries', undefined, isRtl ? 'סופר וקניות 🛒' : 'Groceries 🛒') },
+    { id: 'Travel', label: t('categoryTravel', undefined, isRtl ? 'טיולים וחופשות ✈️' : 'Travel & Trips ✈️') },
+    { id: 'Other', label: t('categoryOther', undefined, isRtl ? 'כללי / אחר 🏷️' : 'General / Other 🏷️') },
+  ];
 
   const [storeName, setStoreName] = useState('');
+  const [billNickName, setBillNickName] = useState('');
   const [selectedCurrency, setSelectedCurrency] = useState<string>(currency || 'NIS');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Food');
   const [items, setItems] = useState<DraftItem[]>([
-    { id: '1', name: '', price: '' }
+    { id: '1', name: '', price: '', quantity: 1 }
   ]);
-  const [initialReceiptSignature, setInitialReceiptSignature] = useState('');
-  const [editedMismatchSignature, setEditedMismatchSignature] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const prevIsOpenRef = useRef(false);
+  const currentBillIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setStoreName(initialData?.storeName || initialData?.title || '');
-    setSelectedCurrency(initialData?.currency || currency || 'NIS');
-    const initialItems: DraftItem[] = Array.isArray(initialData?.items) && initialData.items.length > 0
-      ? initialData.items.map((item, index): DraftItem => {
-          const price: number | '' = Number(item.price) > 0 ? Number(item.price) : '';
-          return {
-            ...item,
-            id: item.id || `draft_existing_${index}`,
-            name: item.name || '',
-            price,
-          };
-        })
-      : [{ id: '1', name: '', price: '' }];
-    setItems(initialItems);
-    setInitialReceiptSignature(receiptDraftSignature(
-      initialData?.storeName || initialData?.title || '',
-      initialData?.currency || currency || 'NIS',
-      initialItems,
-    ));
-    setEditedMismatchSignature('');
-  }, [isOpen, initialData, currency]);
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+
+    const isNewOpen = !prevIsOpenRef.current;
+    const isDifferentBill = initialData?.id && initialData.id !== currentBillIdRef.current;
+
+    if (isNewOpen || isDifferentBill) {
+      const initialStore = initialData?.storeName || initialData?.title || '';
+      setStoreName(initialStore);
+      setBillNickName(initialStore);
+      setSelectedCurrency(initialData?.currency || currency || 'NIS');
+      
+      const initialItems: DraftItem[] = Array.isArray(initialData?.items) && initialData.items.length > 0
+        ? initialData.items.map((item, index): DraftItem => {
+            const price: number | '' = Number(item.price) > 0 ? Number(item.price) : '';
+            return {
+              ...item,
+              id: item.id || `draft_existing_${index}`,
+              name: item.name || '',
+              price,
+              quantity: item.quantity || 1,
+            };
+          })
+        : [{ id: '1', name: '', price: '', quantity: 1 }];
+
+      setItems(initialItems);
+      setIsSubmitting(false);
+      setEditingItemId(null);
+      currentBillIdRef.current = initialData?.id;
+    }
+
+    prevIsOpenRef.current = true;
+  }, [isOpen, initialData?.id, currency]);
 
   if (!isOpen) return null;
 
   const handleAddItem = () => {
-    setEditedMismatchSignature('');
+    const newId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
     setItems((prev) => [
       ...prev,
-      {
-        id: `draft_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
-        name: '',
-        price: ''
-      }
+      { id: newId, name: '', price: '', quantity: 1 }
     ]);
+    setEditingItemId(newId);
   };
 
-  const handleRemoveItem = (id: string) => {
-    setEditedMismatchSignature('');
+  const handleRemoveItem = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (items.length <= 1) {
-      setItems([{ id: '1', name: '', price: '' }]);
+      setItems([{ id: '1', name: '', price: '', quantity: 1 }]);
       return;
     }
     setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
   const handleItemChange = (id: string, field: keyof DraftItem, value: any) => {
-    setEditedMismatchSignature('');
     setItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
@@ -109,10 +131,19 @@ export const ManualBillModal: React.FC<ManualBillModalProps> = ({
     }, 0);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const calculateGrandTotal = () => {
+    const subtotal = calculateSubtotal();
+    const serviceFee = Number(initialData?.service || 0);
+    const taxFee = Number(initialData?.tax || 0);
+    const discountFee = Number(initialData?.discount || 0);
+    return Math.max(0, subtotal + serviceFee + taxFee - discountFee);
+  };
 
-    const finalTitle = storeName.trim() || t('manualEntryTitle', undefined, 'Custom Bill Split');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting || isLoading) return;
+
+    const finalTitle = billNickName.trim() || storeName.trim() || t('manualEntryTitle', undefined, isRtl ? 'חשבון חדש' : 'Custom Bill Split');
 
     const validItems = items
       .filter((i) => i.name.trim().length > 0 && Number(i.price) > 0)
@@ -125,260 +156,272 @@ export const ManualBillModal: React.FC<ManualBillModalProps> = ({
         unitPrice: Number(i.quantity) > 0
           ? Math.round((Number(i.price) / Number(i.quantity)) * 100) / 100
           : (i.unitPrice || Number(i.price)),
-        category: i.category || 'Item',
+        category: selectedCategory || 'Food',
         claimedBy: Array.isArray(i.claimedBy) ? i.claimedBy : [],
       }));
 
     if (validItems.length === 0) {
-      alert(t('couldNotParse', undefined, 'Please add at least one item with a valid name and price.'));
+      alert(t('couldNotParse', undefined, isRtl ? 'אנא הזן לפחות פריט אחד עם שם ומחיר תקינים.' : 'Please add at least one item with a valid name and price.'));
       return;
     }
 
-    const submissionSignature = receiptDraftSignature(storeName, selectedCurrency, validItems);
-    const submissionReconciliation = isReceiptReview
-      ? reconcileReceipt({ ...initialData, items: validItems })
-      : null;
-    if (
-      isReceiptReview
-      && submissionSignature !== initialReceiptSignature
-      && submissionReconciliation?.needsReview
-      && editedMismatchSignature !== submissionSignature
-    ) {
-      setEditedMismatchSignature(submissionSignature);
-      return;
+    try {
+      setIsSubmitting(true);
+      await onLaunchSession({
+        storeName: finalTitle,
+        date: typeof initialData?.date === 'string' ? initialData.date : undefined,
+        currency: selectedCurrency,
+        items: validItems,
+        category: selectedCategory,
+      });
+    } catch (err) {
+      console.error('Error launching session:', err);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onLaunchSession({
-      storeName: finalTitle,
-      date: typeof initialData?.date === 'string' ? initialData.date : undefined,
-      currency: selectedCurrency,
-      items: validItems
-    });
   };
 
-  const previewImages = Array.isArray(initialData?._previewImages) ? initialData._previewImages : [];
-  const printedTotal = Number(initialData?.receiptTotal);
-  const hasPrintedTotal = initialData?.receiptTotal !== null
-    && initialData?.receiptTotal !== undefined
-    && Number.isFinite(printedTotal)
-    && printedTotal >= 0;
-  const isReceiptReview = previewImages.length > 0 || Boolean(initialData?.ocr || initialData?.reconciliation);
-  const currentSignature = receiptDraftSignature(storeName, selectedCurrency, items);
-  const liveReconciliation = isReceiptReview ? reconcileReceipt({ ...initialData, items }) : null;
-  const hasEditedReceipt = currentSignature !== initialReceiptSignature;
-  const editedReceiptNeedsReview = Boolean(hasEditedReceipt && liveReconciliation?.needsReview);
-  const riskLevel = editedReceiptNeedsReview
-    ? 'high'
-    : (initialData?.assessment?.level || (liveReconciliation?.needsReview ? 'high' : 'low'));
-  const reviewReasons = [
-    ...(Array.isArray(initialData?.assessment?.reasons) ? initialData.assessment.reasons : []),
-    ...(editedReceiptNeedsReview ? ['edited-total-mismatch'] : []),
-  ];
+  const serviceFee = Number(initialData?.service || 0);
+  const taxFee = Number(initialData?.tax || 0);
+  const displayDate = initialData?.date || new Date().toISOString().split('T')[0];
+  const submittingNow = isSubmitting || isLoading;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn text-slate-900 dark:text-white">
-      <div role="dialog" aria-modal="true" aria-label={t('manualEntryTitle', undefined, 'Create Custom Split Bill')} className="w-full max-w-lg photo-card p-6 bg-white dark:bg-[#0E131F] border border-slate-200 dark:border-slate-800 space-y-5 shadow-2xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-extrabold text-base leading-tight tracking-tight text-slate-900 dark:text-white">
-                {t('manualEntryTitle', undefined, 'Create Custom Split Bill')}
-              </h3>
-              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-                {t('manualEntrySub', undefined, 'Enter title & items before launching room')}
-              </p>
-            </div>
-          </div>
-
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 dark:bg-black/80 backdrop-blur-md animate-fadeIn"
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
+      <div 
+        role="dialog" 
+        aria-modal="true"
+        className="w-full max-w-md rounded-[32px] bg-[#F4F6FA] dark:bg-[#0B101D] text-slate-900 dark:text-slate-100 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200/80 dark:border-slate-800 animate-slideUp"
+      >
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 bg-white dark:bg-[#101728] border-b border-slate-100 dark:border-slate-800/80">
           <button
+            type="button"
             onClick={onClose}
-            aria-label={t('closeBtn', undefined, 'Close')}
-            className="p-2 rounded-full bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors"
+            aria-label="Back"
+            className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors active:scale-95"
           >
-            <X className="w-4 h-4" />
+            <ChevronLeft className={`w-5 h-5 ${isRtl ? 'rotate-180' : ''}`} />
           </button>
+
+          <h3 className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight">
+            {t('recognizedItemsTitle', undefined, isRtl ? 'פריטי החשבונית' : 'Recognized Items')}
+          </h3>
+
+          <div className="w-9 h-9 flex items-center justify-center text-slate-400">
+            <Info className="w-4 h-4" />
+          </div>
         </div>
 
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-5 pr-1 scrollbar-thin">
-          {isReceiptReview && (
-            <div className={`rounded-2xl border p-3 ${riskLevel === 'high' ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/70'}`}>
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${riskLevel === 'high' ? 'text-amber-600' : 'text-slate-500'}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-extrabold">
-                    {t('receiptReviewTitle', undefined, 'Compare every row with the receipt before confirming')}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
-                    {t('receiptItemsShown', { amount: formatPrice(calculateSubtotal(), selectedCurrency) }, `Items shown: ${formatPrice(calculateSubtotal(), selectedCurrency)}`)}
-                    {' · '}
-                    {hasPrintedTotal
-                      ? t('receiptPrintedTotal', { amount: formatPrice(printedTotal, selectedCurrency) }, `Printed total: ${formatPrice(printedTotal, selectedCurrency)}`)
-                      : t('receiptPrintedUnverified', undefined, 'Printed total was not verified')}
-                  </p>
-                  {reviewReasons.length > 0 && (
-                    <p className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                      {t('receiptReviewFlags', { flags: reviewReasons.join(', ') }, `Review flags: ${reviewReasons.join(', ')}`)}
-                    </p>
-                  )}
-                  {editedReceiptNeedsReview && (
-                    <p className="mt-2 rounded-xl bg-amber-100 px-2.5 py-2 text-[10px] font-bold text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
-                      {editedMismatchSignature === currentSignature
-                        ? t('receiptEditedMismatchConfirm', undefined, 'The edited rows still do not match the printed total. Click confirm again only if the receipt image supports these values.')
-                        : t('receiptEditedMismatchWarning', undefined, 'Your edits no longer match the printed total. Review the changed rows, then click confirm once more to acknowledge the mismatch.')}
-                    </p>
-                  )}
-                  {initialData?.reconciliation?.status === 'matched_adjusted' && (
-                    <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-300">
-                      {t('receiptAdjustedPolicy', undefined, 'Printed tax, service, or discount is spread proportionally across claimed items. Edit item prices to net amounts if the adjustment belongs to specific rows.')}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {previewImages.length > 0 && (
-                <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1">
-                  {previewImages.map((source: string, index: number) => (
-                    <img
-                      key={`receipt-preview-${index}`}
-                      src={source}
-                      alt={t('receiptSourceAlt', { index: index + 1 }, `Receipt source ${index + 1}`)}
-                      className="h-40 w-auto shrink-0 rounded-xl border border-slate-200 bg-white object-contain dark:border-slate-700"
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Bill Info Section */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2 space-y-1.5">
-              <label className="text-xs font-extrabold text-slate-700 dark:text-slate-300 tracking-wide uppercase text-[10px]">
-                {t('billTitleLabel', undefined, 'Bill / Venue Title')}
-              </label>
+        {/* Scrollable Receipt Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+          
+          {/* TOP CARD: The Authentic Receipt Paper Card */}
+          <div className="rounded-[24px] bg-white dark:bg-[#121B2F] border border-slate-200/90 dark:border-slate-800 shadow-sm p-5 space-y-4 relative overflow-hidden">
+            
+            {/* Store Name & Date */}
+            <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-200 dark:border-slate-700/80">
               <input
                 type="text"
                 value={storeName}
                 onChange={(e) => {
                   setStoreName(e.target.value);
-                  setEditedMismatchSignature('');
+                  if (!billNickName || billNickName === storeName) setBillNickName(e.target.value);
                 }}
-                placeholder={t('billTitlePlaceholder', undefined, 'e.g. Italian Bistro Dinner')}
-                className="w-full py-2.5 px-3.5 rounded-xl photo-input text-xs font-semibold bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
+                placeholder={t('storeNamePlaceholder', undefined, isRtl ? 'שם העסק / מסעדה' : 'Store / Restaurant Name')}
+                className="w-full text-center font-black text-base text-slate-900 dark:text-white bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-indigo-500/40 rounded-lg py-0.5"
                 required
+              />
+              <p className="text-[11px] font-mono font-medium text-slate-400 dark:text-slate-400">
+                {displayDate}
+              </p>
+            </div>
+
+            {/* Itemized Receipt List */}
+            <div className="space-y-2 pt-1">
+              {items.map((item) => {
+                const isEditing = editingItemId === item.id;
+
+                if (isEditing) {
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#18233A] border border-indigo-500/50 space-y-2 animate-fadeIn"
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => handleItemChange(item.id, 'name', e.target.value)}
+                          placeholder={t('itemNameLabel', undefined, isRtl ? 'שם הפריט' : 'Item Name')}
+                          className="flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold bg-white dark:bg-[#0E1524] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                          autoFocus
+                          required
+                        />
+                        <div className="w-24 relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.price}
+                            onChange={(e) => handleItemChange(item.id, 'price', e.target.value === '' ? '' : parseFloat(e.target.value))}
+                            placeholder={t('priceLabel', undefined, isRtl ? 'מחיר' : 'Price')}
+                            className="w-full py-1.5 px-2 rounded-lg text-xs font-mono font-black bg-white dark:bg-[#0E1524] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                            required
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItemId(null)}
+                          className="p-1.5 rounded-lg bg-emerald-500 text-white shadow-xs hover:bg-emerald-600 active:scale-95"
+                          title="Done"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setEditingItemId(item.id)}
+                    className="flex items-center justify-between text-xs py-1.5 px-2 rounded-xl hover:bg-slate-50 dark:hover:bg-[#18233A]/60 cursor-pointer transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <span className="text-[11px] font-bold text-slate-400 font-mono shrink-0">
+                        {item.quantity || 1}x
+                      </span>
+                      <span className="font-bold text-slate-800 dark:text-slate-100 truncate">
+                        {item.name || <span className="text-slate-400 italic">{t('tapToNameItem', undefined, isRtl ? 'לחץ להזנת שם' : 'Tap to enter name')}</span>}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono font-black text-slate-900 dark:text-white">
+                        {formatPrice(Number(item.price) || 0, selectedCurrency)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleRemoveItem(item.id, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-500 transition-opacity"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Add Item Action */}
+            <button
+              type="button"
+              onClick={handleAddItem}
+              className="w-full py-2 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{t('addItemBtn', undefined, isRtl ? 'הוסף פריט +' : '+ Add Another Item')}</span>
+            </button>
+
+            {/* Totals Breakdown */}
+            <div className="pt-3 border-t border-dashed border-slate-200 dark:border-slate-700/80 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-500 dark:text-slate-400 font-medium">
+                <span>{t('subtotalLabel', undefined, isRtl ? 'סכום ביניים' : 'Subtotal')}</span>
+                <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                  {formatPrice(calculateSubtotal(), selectedCurrency)}
+                </span>
+              </div>
+
+              {serviceFee > 0 && (
+                <div className="flex justify-between text-slate-500 dark:text-slate-400 font-medium">
+                  <span>{t('serviceFeeLabel', undefined, isRtl ? 'שירות / טיפ' : 'Service / Tip')}</span>
+                  <span className="font-mono font-bold text-indigo-500">
+                    {formatPrice(serviceFee, selectedCurrency)}
+                  </span>
+                </div>
+              )}
+
+              {taxFee > 0 && (
+                <div className="flex justify-between text-slate-500 dark:text-slate-400 font-medium">
+                  <span>{t('taxLabel', undefined, isRtl ? 'מע״מ / מס' : 'Tax')}</span>
+                  <span className="font-mono font-bold text-indigo-500">
+                    {formatPrice(taxFee, selectedCurrency)}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-sm font-black text-slate-900 dark:text-white pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                <span>{t('totalBillLabel', undefined, isRtl ? 'סה״כ לתשלום' : 'Total Bill')}</span>
+                <span className="font-mono font-black text-base text-slate-900 dark:text-white">
+                  {formatPrice(calculateGrandTotal(), selectedCurrency)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* BOTTOM CARD: Split Name & Category */}
+          <div className="rounded-[24px] bg-white dark:bg-[#121B2F] border border-slate-200/90 dark:border-slate-800 shadow-sm p-5 space-y-3.5">
+            {/* Bill Nickname */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300">
+                {t('billNickNameLabel', undefined, isRtl ? 'שם החשבון' : "Bill's Name")}
+              </label>
+              <input
+                type="text"
+                value={billNickName}
+                onChange={(e) => setBillNickName(e.target.value)}
+                placeholder={t('billNamePlaceholder', undefined, isRtl ? 'למשל: ארוחת צהריים או שולחן שישי' : 'e.g. Chill Brekkie or Friday Dinner')}
+                className="w-full py-2.5 px-3.5 rounded-xl text-xs font-bold bg-slate-50 dark:bg-[#18233A] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
               />
             </div>
 
+            {/* Category Dropdown */}
             <div className="space-y-1.5">
-              <label className="text-xs font-extrabold text-slate-700 dark:text-slate-300 tracking-wide uppercase text-[10px]">
-                {t('preferredCurrencyLabel', undefined, 'Currency')}
+              <label className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300">
+                {t('categoryLabel', undefined, isRtl ? 'קטגוריה' : 'Category')}
               </label>
               <select
-                value={selectedCurrency}
-                onChange={(e) => {
-                  setSelectedCurrency(e.target.value);
-                  setEditedMismatchSignature('');
-                }}
-                className="w-full py-2.5 px-2.5 rounded-xl photo-input text-xs font-extrabold bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-50 dark:bg-[#18233A] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
               >
-                <option value="NIS">NIS ₪</option>
-                <option value="USD">USD $</option>
-                <option value="EUR">EUR €</option>
-                <option value="GBP">GBP £</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
-          {/* Dynamic Items Builder List */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-[10px]">
-                {t('receiptItemsTitle', undefined, 'Receipt Items')} ({items.length})
-              </span>
-              <span className="text-xs font-mono font-black text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700">
-                Subtotal: {formatPrice(calculateSubtotal(), selectedCurrency)}
-              </span>
-
-            </div>
-
-            <div className="space-y-2.5">
-              {items.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80"
-                >
-                  <span className="text-xs font-bold font-mono text-slate-400 dark:text-slate-500 w-4 text-center">
-                    {index + 1}
-                  </span>
-
-                  <input
-                    type="text"
-                    placeholder={t('itemNameLabel', undefined, 'Item Name')}
-                    value={item.name}
-                    onChange={(e) => handleItemChange(item.id, 'name', e.target.value)}
-                    className="flex-1 py-2 px-3 rounded-xl photo-input text-xs font-semibold bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
-                    required
-                  />
-
-                  <div className="w-32 relative">
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder={t('priceLabel', undefined, 'Price')}
-                      value={item.price}
-                      onChange={(e) =>
-                        handleItemChange(item.id, 'price', e.target.value === '' ? '' : parseFloat(e.target.value))
-                      }
-                      className="w-full py-2 px-2.5 rounded-xl photo-input text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveItem(item.id)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleAddItem()}
-              className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t('addItemBtn', undefined, 'Add Another Item')}</span>
-            </button>
-          </div>
-
-          {/* Footer Buttons */}
-          <div className="pt-3 flex items-center gap-3 border-t border-slate-100 dark:border-slate-800/80">
+          {/* Action Buttons */}
+          <div className="pt-2 flex items-center gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="py-3 px-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-extrabold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              disabled={submittingNow}
+              className="flex-1 py-3.5 px-4 rounded-full border border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 font-extrabold text-xs transition-colors"
             >
-              {t('cancelBtn', undefined, 'Cancel')}
+              {t('cancelBtn', undefined, isRtl ? 'ביטול' : 'Cancel')}
             </button>
 
             <button
               type="submit"
-              className="flex-1 py-3 rounded-full bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-black text-xs hover:bg-slate-900 dark:hover:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
+              disabled={submittingNow}
+              className="flex-[2] py-3.5 px-6 rounded-full bg-[#4F46E5] hover:bg-[#4338CA] text-white font-black text-xs shadow-lg shadow-indigo-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>{editedReceiptNeedsReview && editedMismatchSignature !== currentSignature
-                ? t('reviewEditedReceiptBtn', undefined, 'Review changed total')
-                : (isReceiptReview ? t('confirmReceiptContinue', undefined, 'Confirm receipt & continue') : t('createAndStartSessionBtn', undefined, 'Create & Launch Session'))}</span>
-              <ArrowRight className={`w-3.5 h-3.5 ${isRtl ? 'rotate-180' : ''}`} />
+              {submittingNow ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>{t('processingBill', undefined, isRtl ? 'יוצר חשבון...' : 'Creating Bill...')}</span>
+                </>
+              ) : (
+                <span>{t('continueBtn', undefined, isRtl ? 'המשך' : 'Continue')}</span>
+              )}
             </button>
           </div>
         </form>

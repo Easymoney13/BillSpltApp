@@ -38,10 +38,10 @@ function sampleSession() {
 }
 
 test('room codes never reuse an occupied session or group code', () => {
-  const data = { sessions: { a: { code: '12345678' } }, groups: { b: { code: '56781234' } } };
-  const values = [12345678, 56781234, 90123456];
+  const data = { sessions: { a: { code: '1234' } }, groups: { b: { code: '5678' } } };
+  const values = [1234, 5678, 9012];
   const result = createUniqueRoomCode(data, () => values.shift());
-  assert.equal(result, '90123456');
+  assert.equal(result, '9012');
 });
 
 test('access token hashes compare without exposing the token', () => {
@@ -570,10 +570,10 @@ test('OCR verification uses a different pinned model from the primary read', asy
   };
   try {
     const receipt = await parseReceiptImage('/9j/', 'image/jpeg', 'test-key', { pipelineTimeoutMs: 12_000 });
-    assert.match(endpoints[0], /gemini-2\.0-flash:generateContent/);
-    assert.match(endpoints[1], /gemini-1\.5-flash:generateContent/);
+    assert.match(endpoints[0], /gemini-3\.6-flash:generateContent/);
+    assert.match(endpoints[1], /gemini-flash-latest:generateContent/);
     assert.equal(receipt.ocr.verificationStatus, 'cross_model_agreement');
-    assert.equal(receipt.ocr.verificationModelName, 'gemini-1.5-flash');
+    assert.equal(receipt.ocr.verificationModelName, 'gemini-flash-latest');
   } finally {
     global.fetch = originalFetch;
   }
