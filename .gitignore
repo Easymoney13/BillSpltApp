@@ -22,6 +22,12 @@ tsconfig.tsbuildinfo
 # scratch scripts
 scratch/
 
+# local runtime data (never commit user or receipt records)
+/db.json
+/db.json.tmp
+/db-*.json
+/db-*.json.tmp
+
 # debug logs
 *.log
 npm-debug.log*

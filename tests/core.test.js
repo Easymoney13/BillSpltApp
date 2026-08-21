@@ -44,6 +44,15 @@ test('room codes never reuse an occupied session or group code', () => {
   assert.equal(result, '9012');
 });
 
+test('room code allocation finds the final free code after random retries are exhausted', () => {
+  const sessions = {};
+  for (let code = 1000; code < 9999; code += 1) {
+    sessions[`session-${code}`] = { code: String(code) };
+  }
+  const result = createUniqueRoomCode({ sessions, groups: {} }, () => 1000);
+  assert.equal(result, '9999');
+});
+
 test('access token hashes compare without exposing the token', () => {
   const hash = hashAccessToken('secret-token');
   assert.equal(tokenMatches('secret-token', hash), true);

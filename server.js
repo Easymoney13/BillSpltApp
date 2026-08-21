@@ -117,8 +117,9 @@ if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
   }
 }
 
-// Initialize Firestore database migration from local db.json if needed
-if (typeof db.migrateLocalDbToFirestore === 'function') {
+// Local data migration is an explicit administrative operation. Never upload a
+// repository-adjacent database merely because a Firestore project is empty.
+if (process.env.MIGRATE_LOCAL_DB_TO_FIRESTORE === 'true' && typeof db.migrateLocalDbToFirestore === 'function') {
   db.migrateLocalDbToFirestore();
 }
 
@@ -170,6 +171,7 @@ app.prepare().then(() => {
   const wsConnectionsByIp = new Map();
   const maxWebSockets = 500;
   const maxWebSocketsPerIp = 8;
+  const wsSubscriptionTimeoutMs = Math.max(500, Math.min(30_000, Number(process.env.WS_SUBSCRIPTION_TIMEOUT_MS) || 10_000));
 
   function rejectUpgrade(socket, statusCode, statusText) {
     if (!socket.destroyed) {
@@ -362,6 +364,21 @@ app.prepare().then(() => {
       id: room.id,
       code: room.code,
       status: room.status,
+    };
+  }
+
+  function publicUserProfile(user) {
+    return {
+      id: user.id,
+      username: user.username || 'User',
+      avatarColor: user.avatarColor || '#7C3AED',
+      ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+      settings: {
+        language: user.settings?.language || 'en',
+        currency: user.settings?.currency || 'NIS',
+        theme: user.settings?.theme || 'light',
+        ocrEngine: user.settings?.ocrEngine || 'tesseract',
+      },
     };
   }
 
@@ -558,8 +575,10 @@ app.prepare().then(() => {
     };
   }
 
-  const roomLookupRateLimit = roomWindowRateLimit(roomLookupRateBuckets, 250, 'Too many room lookups. Please wait and try again.');
-  const roomJoinRateLimit = roomWindowRateLimit(roomJoinRateBuckets, 120, 'Too many room join attempts. Please wait and try again.');
+  // Four-digit invite codes are deliberately easy to type, so anonymous
+  // discovery and join attempts need tighter brute-force limits.
+  const roomLookupRateLimit = roomWindowRateLimit(roomLookupRateBuckets, 60, 'Too many room lookups. Please wait and try again.');
+  const roomJoinRateLimit = roomWindowRateLimit(roomJoinRateBuckets, 30, 'Too many room join attempts. Please wait and try again.');
   const mutationRateLimit = roomWindowRateLimit(mutationRateBuckets, 240, 'Too many room updates. Please wait and try again.');
   const accountReadRateLimit = roomWindowRateLimit(accountReadRateBuckets, 240, 'Too many account reads. Please wait and try again.');
   async function accountReadAdmission(req, res, nextMiddleware) {
@@ -1041,9 +1060,6 @@ app.prepare().then(() => {
       return res.status(404).json({ error: 'Session not found' });
     }
     const actor = authorizedRoomMember(req, session);
-    if (/^\d{4}$/.test(sanitizedId) && !actor) {
-      return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
-    }
     return res.json({ session: actor ? publicRoom(session) : roomDiscovery(session) });
   });
 
@@ -1051,9 +1067,6 @@ app.prepare().then(() => {
     try {
       const session = await db.getSession(security.sanitizeString(req.params.idOrCode, 100));
       if (!session) return res.status(404).json({ error: 'Session not found' });
-      if (/^\d{4}$/.test(String(req.params.idOrCode || '')) && !authorizedRoomMember(req, session)) {
-        return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
-      }
       let joined = null;
       const mutation = await db.transactSessionAndLinkedGroup(session.id, (currentSession, currentGroup) => {
         if (currentSession.status === 'settled') {
@@ -1287,9 +1300,6 @@ app.prepare().then(() => {
     }
 
     const actor = authorizedRoomMember(req, group);
-    if (/^\d{4}$/.test(sanitizedId) && !actor) {
-      return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
-    }
     return res.json({ group: actor ? publicGroupWithDebt(group) : roomDiscovery(group) });
   });
 
@@ -1300,9 +1310,6 @@ app.prepare().then(() => {
       const group = await db.getGroup(groupId);
       if (!group) {
         return res.status(404).json({ error: 'Group not found' });
-      }
-      if (/^\d{4}$/.test(String(groupId || '')) && !authorizedRoomMember(req, group)) {
-        return res.status(410).json({ error: 'This legacy invite code has expired. Ask the host for a new room.' });
       }
 
       let joined = null;
@@ -1686,6 +1693,29 @@ app.prepare().then(() => {
   // Real-Time Currency Exchange Rates API
   let cachedRates = null;
   let lastRatesFetchTime = 0;
+  let activeRatesFetch = null;
+
+  async function fetchLiveExchangeRates() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    try {
+      const apiRes = await fetch('https://open.er-api.com/v6/latest/USD', { signal: controller.signal });
+      if (!apiRes.ok) return null;
+      const data = await apiRes.json();
+      if (!data || !data.rates) return null;
+      const usdToNis = data.rates.ILS || 3.65;
+      return {
+        ...data.rates,
+        USD: 1.0,
+        NIS: usdToNis,
+        ILS: usdToNis,
+        EUR: data.rates.EUR || 0.92,
+        GBP: data.rates.GBP || 0.78,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 
   server.get('/api/exchange-rates', async (req, res) => {
     try {
@@ -1694,23 +1724,17 @@ app.prepare().then(() => {
         return res.json({ success: true, rates: cachedRates, source: 'cached' });
       }
 
-      const apiRes = await fetch('https://open.er-api.com/v6/latest/USD');
-      if (apiRes.ok) {
-        const data = await apiRes.json();
-        if (data && data.rates) {
-          const usdToNis = data.rates.ILS || 3.65;
-          cachedRates = {
-            ...data.rates,
-            USD: 1.0,
-            NIS: usdToNis,
-            ILS: usdToNis,
-            EUR: data.rates.EUR || 0.92,
-            GBP: data.rates.GBP || 0.78
-          };
-          lastRatesFetchTime = now;
-          console.log(`⚡ Live currency exchange rates updated: 1 USD = ${usdToNis.toFixed(2)} NIS, 1 GBP = ${(usdToNis / cachedRates.GBP).toFixed(2)} NIS, 1 EUR = ${(usdToNis / cachedRates.EUR).toFixed(2)} NIS`);
-          return res.json({ success: true, rates: cachedRates, source: 'live' });
-        }
+      if (!activeRatesFetch) {
+        activeRatesFetch = fetchLiveExchangeRates().finally(() => {
+          activeRatesFetch = null;
+        });
+      }
+      const liveRates = await activeRatesFetch;
+      if (liveRates) {
+        cachedRates = liveRates;
+        lastRatesFetchTime = Date.now();
+        console.log(`⚡ Live currency exchange rates updated: 1 USD = ${cachedRates.NIS.toFixed(2)} NIS, 1 GBP = ${(cachedRates.NIS / cachedRates.GBP).toFixed(2)} NIS, 1 EUR = ${(cachedRates.NIS / cachedRates.EUR).toFixed(2)} NIS`);
+        return res.json({ success: true, rates: cachedRates, source: 'live' });
       }
     } catch (err) {
       console.error('Error fetching real-time exchange rates, using fallback:', err.message);
@@ -1804,7 +1828,7 @@ app.prepare().then(() => {
       // Sync avatar URL from Google if available
       if (picture && user.avatarUrl !== picture) {
         user.avatarUrl = picture;
-        await db.saveUser(user);
+        await db.saveUser(user, uid);
       }
 
       void trackAnalyticsEvent('user_synced', {
@@ -1812,7 +1836,7 @@ app.prepare().then(() => {
         metadata: { route: '/api/user/sync' },
       });
 
-      return res.json({ success: true, user });
+      return res.json({ success: true, user: publicUserProfile(user) });
     } catch (err) {
       console.error('Error syncing user:', err);
       return res.status(500).json({ error: 'Failed to sync user' });
@@ -2046,8 +2070,19 @@ app.prepare().then(() => {
     ws.messageWindowStartedAt = Date.now();
     ws.messageCount = 0;
     ws.messageInFlight = false;
+    ws.subscriptionDeadline = setTimeout(() => {
+      if (ws.subscriptions.size === 0) {
+        ws.close(1008, 'Subscription required');
+        const forcedClose = setTimeout(() => {
+          if (ws.readyState !== WebSocket.CLOSED) ws.terminate();
+        }, 250);
+        forcedClose.unref?.();
+      }
+    }, wsSubscriptionTimeoutMs);
+    ws.subscriptionDeadline.unref?.();
     ws.on('pong', () => { ws.isAlive = true; });
     ws.once('close', () => {
+      clearTimeout(ws.subscriptionDeadline);
       const clientIp = ws.clientIp || 'unknown';
       const remaining = Math.max(0, (wsConnectionsByIp.get(clientIp) || 1) - 1);
       if (remaining) wsConnectionsByIp.set(clientIp, remaining);
@@ -2104,6 +2139,7 @@ app.prepare().then(() => {
           const authorization = { memberId: member.id, tokenHash: hashAccessToken(accessToken) };
           subscribeClient(ws, 'group', group.id, authorization);
           if (group.code) subscribeClient(ws, 'group', group.code, authorization);
+          clearTimeout(ws.subscriptionDeadline);
           ws.send(JSON.stringify({ type: 'GROUP_UPDATE', group: publicGroupWithDebt(group) }));
           return;
         }
@@ -2123,6 +2159,7 @@ app.prepare().then(() => {
           const authorization = { memberId: member.id, tokenHash: hashAccessToken(accessToken) };
           subscribeClient(ws, 'session', session.id, authorization);
           if (session.code) subscribeClient(ws, 'session', session.code, authorization);
+          clearTimeout(ws.subscriptionDeadline);
           ws.send(JSON.stringify({ type: 'SESSION_UPDATE', session: publicRoom(session) }));
           return;
         }
@@ -2140,6 +2177,9 @@ app.prepare().then(() => {
   });
 
   server.get('/api/network-ip', (req, res) => {
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_NETWORK_IP_ENDPOINT !== 'true') {
+      return res.status(404).json({ error: 'Not found' });
+    }
     res.json({ ip: getLocalNetworkIp(), port: PORT });
   });
 

@@ -840,6 +840,14 @@ function SessionWorkspaceInner() {
             const itemPrice = typeof item?.price === 'number' ? item.price : parseFloat(item?.price) || 0;
             const splitPrice = splitCount > 0 ? itemPrice / splitCount : itemPrice;
             const activeCurr = session?.currency || langCtx?.currency || 'NIS';
+            const claimantDetails = claimants.map((cId: string) => {
+              const member = validMembers.find((candidate: any) => candidate?.id === cId);
+              const isMe = cId === currentMemberId;
+              const fullName = member?.name && member.name.trim() !== '?'
+                ? member.name.trim()
+                : (isMe ? (profile?.displayName || 'User') : 'Member');
+              return { id: cId, fullName, isMe };
+            });
 
             // Distinctive Category Styling
             const cat = (item?.category || '').toLowerCase();
@@ -920,6 +928,27 @@ function SessionWorkspaceInner() {
                         )}
                       </div>
 
+                      {claimantDetails.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2" aria-label={t('claimedByLabel', { name: claimantDetails.map(({ fullName }: any) => fullName).join(', ') }, 'Claimed by')}>
+                          {claimantDetails.map(({ id, fullName, isMe }: any) => (
+                            <span
+                              key={id}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                                isMe
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-slate-100 dark:bg-[#1A2232] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                              }`}
+                            >
+                              <span className="w-3.5 h-3.5 rounded-full bg-slate-300/50 dark:bg-white/10 flex items-center justify-center text-[8px]">
+                                {fullName.charAt(0).toUpperCase()}
+                              </span>
+                              {fullName}
+                              {isMe && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
                       <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-md ${catStyle.badgeBg} border inline-block mt-1 uppercase tracking-wider`}>
                         {t(`cat${item?.category}`, undefined, item?.category || 'General')}
                       </span>
@@ -929,7 +958,8 @@ function SessionWorkspaceInner() {
                   <div className="text-right rtl:text-left">
                     {(() => {
                       type DualPriceResult = { primary: string; secondary?: string };
-                      const itemDual: DualPriceResult = formatDual ? formatDual(itemPrice, activeCurr) : { primary: `${itemPrice}` };
+                      const displayedPrice = splitCount > 1 ? splitPrice : itemPrice;
+                      const itemDual: DualPriceResult = formatDual ? formatDual(displayedPrice, activeCurr) : { primary: `${displayedPrice}` };
                       return (
                         <div className="flex flex-col items-end rtl:items-start">
                           <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
@@ -940,54 +970,32 @@ function SessionWorkspaceInner() {
                               ({itemDual.secondary})
                             </span>
                           )}
+                          {splitCount > 1 && (
+                            <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                              {t('eachLabel', undefined, 'each')}
+                            </span>
+                          )}
                         </div>
                       );
                     })()}
                   </div>
                 </div>
 
-                {/* Claimants list: neatly aligned */}
+                {/* Claim state and split status */}
                 <div className="flex items-center justify-between pt-3 mt-2.5 border-t border-slate-100 dark:border-white/5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {claimants.length === 0 ? (
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2.5 py-0.5 rounded-full">
-                        {t('availableLabel', undefined, 'Available')}
-                      </span>
-                    ) : (
-                      claimants.map((cId: string) => {
-                        const m = validMembers.find((mem: any) => mem?.id === cId);
-                        const isMeClaimant = cId === currentMemberId;
-                        const fullName = m?.name && m?.name.trim() !== '?' ? m.name.trim() : (isMeClaimant ? (profile?.displayName || 'User') : 'Member');
-
-                        return (
-                          <div
-                            key={cId}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold transition-all ${
-                              isMeClaimant
-                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
-                                : 'bg-slate-100 dark:bg-[#1A2232] text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-white/5'
-                            }`}
-                          >
-                            <span className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center text-[9px]">
-                              {fullName.charAt(0).toUpperCase()}
-                            </span>
-                            <span>{fullName}</span>
-                            {isMeClaimant && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {splitCount > 1 && (
-                    <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0 pl-2 rtl:pr-2">
-                      {(() => {
-                        type DualPriceResult = { primary: string; secondary?: string };
-                        const splitDual: DualPriceResult = formatDual ? formatDual(splitPrice, activeCurr) : { primary: `${splitPrice}` };
-                        return `${splitDual?.primary} ${splitDual?.secondary ? `(${splitDual.secondary}) ` : ''}${t('eachLabel', undefined, 'each')}`;
-                      })()}
-                    </span>
-                  )}
+                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
+                    splitCount === 0
+                      ? 'text-slate-500 bg-slate-100 dark:bg-white/5 dark:text-slate-400'
+                      : isClaimedByMe
+                        ? 'text-indigo-700 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300'
+                        : 'text-slate-700 bg-slate-100 dark:bg-[#1A2232] dark:text-slate-300'
+                  }`}>
+                    {splitCount === 0
+                      ? t('availableLabel', undefined, 'Available')
+                      : splitCount > 1
+                        ? t('splitBetweenLabel', { count: splitCount }, `Split between ${splitCount}`)
+                        : t('claimedByLabel', { name: claimantDetails[0]?.fullName || 'Member' }, `Claimed by ${claimantDetails[0]?.fullName || 'Member'}`)}
+                  </span>
                 </div>
               </div>
             );

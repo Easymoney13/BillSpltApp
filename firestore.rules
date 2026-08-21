@@ -8,10 +8,11 @@ service cloud.firestore {
     }
 
     // 1. Users Collection
-    // Only the authenticated owner can read or write their own user profile document directly.
+    // Owners may read their profile. Writes go through the backend so a client
+    // cannot alter identity or server-maintained billing/group fields.
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
     }
 
     // 2. Sessions Collection (Real-time active split rooms)
