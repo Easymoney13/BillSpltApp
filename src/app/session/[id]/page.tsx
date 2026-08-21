@@ -852,37 +852,30 @@ function SessionWorkspaceInner() {
             // Distinctive Category Styling
             const cat = (item?.category || '').toLowerCase();
             let catStyle = {
-              badgeBg: 'bg-amber-500/15 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30',
               iconBg: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
             };
             if (cat.includes('food') || cat.includes('dining') || cat.includes('אוכל') || cat.includes('מסעד')) {
               catStyle = {
-                badgeBg: 'bg-orange-500/15 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30',
                 iconBg: 'bg-orange-500/15 text-orange-500 border-orange-500/25',
               };
             } else if (cat.includes('drink') || cat.includes('beverage') || cat.includes('bar') || cat.includes('שתיי') || cat.includes('בר')) {
               catStyle = {
-                badgeBg: 'bg-cyan-500/15 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
                 iconBg: 'bg-cyan-500/15 text-cyan-500 border-cyan-500/25',
               };
             } else if (cat.includes('dessert') || cat.includes('קינוח') || cat.includes('sweet') || cat.includes('מתוק')) {
               catStyle = {
-                badgeBg: 'bg-rose-500/15 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/30',
                 iconBg: 'bg-rose-500/15 text-rose-500 border-rose-500/25',
               };
             } else if (cat.includes('grocer') || cat.includes('סופר')) {
               catStyle = {
-                badgeBg: 'bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
                 iconBg: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/25',
               };
             } else if (cat.includes('travel') || cat.includes('טיול') || cat.includes('flight') || cat.includes('מלון')) {
               catStyle = {
-                badgeBg: 'bg-indigo-500/15 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
                 iconBg: 'bg-indigo-500/15 text-indigo-500 border-indigo-500/25',
               };
             } else if (cat.includes('shop') || cat.includes('בגדים') || cat.includes('shopping')) {
               catStyle = {
-                badgeBg: 'bg-purple-500/15 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30',
                 iconBg: 'bg-purple-500/15 text-purple-500 border-purple-500/25',
               };
             }
@@ -949,9 +942,6 @@ function SessionWorkspaceInner() {
                         </div>
                       )}
 
-                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-md ${catStyle.badgeBg} border inline-block mt-1 uppercase tracking-wider`}>
-                        {t(`cat${item?.category}`, undefined, item?.category || 'General')}
-                      </span>
                     </div>
                   </div>
 
