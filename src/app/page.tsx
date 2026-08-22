@@ -40,6 +40,7 @@ import { OCRProgressOverlay } from '../components/OCRProgressOverlay';
 import { SwipeableCard } from '../components/SwipeableCard';
 import { ManualBillModal } from '../components/ManualBillModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
+import { SleepingPandaIllustration, AppLogoPanda, HistoryPandaIllustration } from '../components/PandaIllustrations';
 import { compressAvatarImage } from '../../lib/imageUtils';
 import { createReceiptDraft, receiptConfirmationPayload, receiptScanUserMessage } from '../../lib/receiptScanClient';
 import { getCookie, setCookie } from '../../lib/cookies';
@@ -645,15 +646,20 @@ export default function HomePage() {
         {/* TAB 2: SESSIONS (Middle tab) */}
         {activeTab === 'sessions' && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Top Header - Matching Picture 1 (Sessions page only, positioned comfortably down) */}
+            {/* Top Header - Brand Header with Official App Logo (Pic 4) + Classic Modern "Easy split" */}
             <header className="flex items-center justify-between pt-8 sm:pt-10 pb-3 mb-2">
-              <div className="text-left rtl:text-right">
-                <h1 className="font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight leading-tight">
-                  {t('helloUser', { name: profile.displayName || 'James' }, `Hello ${profile.displayName || 'James'}`)}
-                </h1>
-                <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-                  {t('splitBillSubtitle', undefined, 'Split your bill with EasySplit')}
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center shrink-0">
+                  <AppLogoPanda className="w-11 h-11 sm:w-12 sm:h-12" />
+                </div>
+                <div className="text-left rtl:text-right">
+                  <h1 className="font-rounded font-semibold text-2xl sm:text-[26px] text-slate-800 dark:text-slate-100 tracking-tight leading-tight">
+                    Easy split
+                  </h1>
+                  <p className="text-xs sm:text-sm font-normal text-slate-500 dark:text-slate-400 mt-0.5">
+                    {t('splitBillSubtitle', undefined, 'Split your bill with EasySplit')}
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center gap-2.5">
@@ -788,7 +794,7 @@ export default function HomePage() {
                     setShowJoinSessionModal(true);
                     triggerHaptic('light');
                   }}
-                  className="relative rounded-[24px] bg-gradient-to-br from-[#96711C] via-[#8C6816] to-[#7B590E] dark:from-[#8D6917] dark:via-[#815E10] dark:to-[#6E4F0A] p-4 flex flex-col justify-between overflow-hidden shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer group flex-1 min-h-[120px] select-none"
+                  className="relative rounded-[24px] bg-gradient-to-br from-[#2D3644] via-[#242C38] to-[#1C232E] dark:from-[#252E3E] dark:via-[#1F2735] dark:to-[#171D28] p-4 flex flex-col justify-between overflow-hidden shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer group flex-1 min-h-[120px] select-none"
                 >
                   <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner group-hover:bg-white/30 group-hover:scale-110 transition-all duration-300">
                     <QrCode className="w-5 h-5 text-white" />
@@ -833,15 +839,15 @@ export default function HomePage() {
               {userGroups.length === 0 ? (
                 <div 
                   onClick={() => setShowCreateGroupModal(true)}
-                  className="p-5 rounded-2xl bg-white dark:bg-[#1A2230] border border-dashed border-slate-200/80 dark:border-white/10 text-center space-y-2 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-[#20293A] transition-all group active:scale-[0.99]"
+                  className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#1A2230] border border-dashed border-slate-200/90 dark:border-white/10 text-center space-y-3 cursor-pointer hover:bg-slate-50/70 dark:hover:bg-[#20293A] transition-all group active:scale-[0.99] shadow-xs"
                 >
-                  <div className="w-10 h-10 mx-auto rounded-full bg-slate-100 dark:bg-[#252E3E] text-slate-400 dark:text-slate-500 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Users className="w-5 h-5" />
+                  <div className="flex items-center justify-center py-1 group-hover:scale-105 transition-transform duration-300">
+                    <SleepingPandaIllustration className="w-44 h-28" />
                   </div>
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
                     {t('noActiveGroupsYet', undefined, 'No active groups yet')}
                   </p>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 max-w-xs mx-auto">
+                  <p className="text-xs text-slate-400 dark:text-slate-400 max-w-xs mx-auto">
                     {t('createOrJoinGroupPrompt', undefined, 'Create a group or join via code to split bills together')}
                   </p>
                 </div>
@@ -925,10 +931,11 @@ export default function HomePage() {
 
           return (
             <div className="space-y-5 animate-fadeIn pb-4">
-              {/* Top Header for History Tab (Positioned lower down) */}
+              {/* Top Header for History Tab */}
               <header className="flex items-center justify-between pt-8 sm:pt-10 pb-3 mb-2">
-                <div>
-                  <h1 className="font-black text-2xl sm:text-3xl text-slate-900 dark:text-white tracking-tight leading-tight">
+                <div className="flex items-center gap-2.5">
+                  <HistoryPandaIllustration className="w-9 h-9" />
+                  <h1 className="font-rounded font-semibold text-2xl sm:text-[26px] text-slate-800 dark:text-slate-100 tracking-tight leading-tight">
                     {t('tabHistory', undefined, 'History')}
                   </h1>
                 </div>
@@ -1058,8 +1065,8 @@ export default function HomePage() {
                 </div>
 
                 {historyList.length === 0 ? (
-                  <div className="photo-card p-6 bg-white dark:bg-[#121824] text-center text-slate-400 space-y-2 rounded-2xl border border-slate-200/80 dark:border-white/5">
-                    <History className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
+                  <div className="photo-card p-6 bg-white dark:bg-[#121824] text-center text-slate-400 space-y-2.5 rounded-2xl border border-slate-200/80 dark:border-white/5">
+                    <HistoryPandaIllustration className="w-14 h-14 mx-auto mb-1 opacity-90" />
                     <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       {t('noHistoryYet', undefined, 'No settled splits yet.')}
                     </p>

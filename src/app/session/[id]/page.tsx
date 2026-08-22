@@ -33,6 +33,7 @@ import { useLanguage } from '../../../components/LanguageContext';
 import { QRCodeModal } from '../../../components/QRCodeModal';
 import { AttachToGroupModal } from '../../../components/AttachToGroupModal';
 import { ReceiptSkeleton } from '../../../components/SkeletonLoader';
+import { SettledPandaIllustration } from '../../../components/PandaIllustrations';
 import { getCookie, setCookie } from '../../../../lib/cookies';
 import { isValidIsraeliPhone, triggerBitPayment } from '../../../../lib/bitDeepLink';
 import { triggerHaptic } from '../../../../lib/haptics';
@@ -1529,16 +1530,10 @@ function SessionWorkspaceInner() {
             className="w-full max-w-xs rounded-3xl p-6 bg-white dark:bg-[#121824] border border-slate-200 dark:border-white/10 text-center space-y-4 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-scaleUp"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Animated Radiant Check Circle */}
-            <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-slate-400/20 dark:bg-white/10 animate-ping opacity-75" />
-              <div className="relative w-20 h-20 rounded-full bg-slate-900 dark:bg-white p-0.5 shadow-[0_0_30px_rgba(0,0,0,0.3)] dark:shadow-[0_0_30px_rgba(255,255,255,0.3)] flex items-center justify-center">
-                <div className="w-full h-full rounded-full bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-white dark:text-slate-900 animate-bounce-short">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                  </svg>
-                </div>
-              </div>
+            {/* Settled Success Panda with Green Checkmark (Pic 5) */}
+            <div className="relative w-36 h-36 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-emerald-400/20 dark:bg-emerald-400/10 animate-ping opacity-60 pointer-events-none" />
+              <SettledPandaIllustration className="w-32 h-32" />
             </div>
 
             <div className="space-y-1">

@@ -2183,8 +2183,11 @@ app.prepare().then(() => {
     res.json({ ip: getLocalNetworkIp(), port: PORT });
   });
 
+  server.use(express.static(path.join(__dirname, 'public')));
+
   server.all('*', (req, res) => {
-    return handle(req, res);
+    const parsedUrl = require('url').parse(req.url, true);
+    return handle(req, res, parsedUrl);
   });
 
   httpServer.listen(PORT, '0.0.0.0', (err) => {
@@ -2195,4 +2198,7 @@ app.prepare().then(() => {
     console.log(`  - Phone/Wi-Fi: http://${localIp}:${PORT}`);
     console.log(`> ⚡ WebSockets running on ws://${localIp}:${PORT}`);
   });
+}).catch((err) => {
+  console.error('❌ Failed to prepare Next.js app:', err);
+  process.exit(1);
 });
